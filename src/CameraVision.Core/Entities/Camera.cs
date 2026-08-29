@@ -3,6 +3,9 @@ namespace CameraVision.Core.Entities;
 public class Camera
 {
     public int Id { get; set; }
+    public int TenantId { get; set; }
+
+    /// <summary>Globally unique (names map to shared output folders), see SPEC-14.</summary>
     public string Name { get; set; } = "";
 
     /// <summary>Empty for cameras auto-created by the capture import.</summary>

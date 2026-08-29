@@ -8,6 +8,7 @@ namespace CameraVision.Core.Entities;
 public class CaptureRule
 {
     public int Id { get; set; }
+    public int TenantId { get; set; }
     public string Name { get; set; } = "";
     public bool Enabled { get; set; } = true;
 

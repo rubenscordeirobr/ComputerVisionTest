@@ -5,6 +5,9 @@ public class Capture
 {
     public int Id { get; set; }
 
+    /// <summary>Copied from the camera at ingest time so footage stays owned after camera deletion.</summary>
+    public int TenantId { get; set; }
+
     /// <summary>Camera matched (or auto-created) by name; null only if the camera was deleted later.</summary>
     public int? CameraId { get; set; }
 

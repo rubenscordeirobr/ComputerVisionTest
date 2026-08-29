@@ -4,7 +4,9 @@ namespace CameraVision.Core.Repositories;
 
 public interface IUserRepository
 {
-    Task<IReadOnlyList<AppUser>> GetAllAsync(CancellationToken ct = default);
+    /// <summary>Users of one tenant, or everyone (incl. system users) when <paramref name="tenantId"/> is null.</summary>
+    Task<IReadOnlyList<AppUser>> GetAllAsync(int? tenantId = null, CancellationToken ct = default);
+
     Task<AppUser?> GetByIdAsync(int id, CancellationToken ct = default);
     Task<AppUser?> GetByUsernameAsync(string username, CancellationToken ct = default);
     Task<bool> AnyAsync(CancellationToken ct = default);

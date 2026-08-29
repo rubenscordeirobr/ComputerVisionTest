@@ -17,6 +17,10 @@ public enum HealthCondition
 public class CameraHealthEvent
 {
     public int Id { get; set; }
+
+    /// <summary>Copied from the camera so digests route to the right tenant after deletion.</summary>
+    public int TenantId { get; set; }
+
     public int? CameraId { get; set; }
     public string CameraName { get; set; } = "";
     public HealthCondition Condition { get; set; }

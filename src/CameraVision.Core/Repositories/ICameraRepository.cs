@@ -4,7 +4,9 @@ namespace CameraVision.Core.Repositories;
 
 public interface ICameraRepository
 {
-    Task<IReadOnlyList<Camera>> GetAllAsync(CancellationToken ct = default);
+    /// <summary>Cameras of one tenant, or every tenant's when <paramref name="tenantId"/> is null.</summary>
+    Task<IReadOnlyList<Camera>> GetAllAsync(int? tenantId = null, CancellationToken ct = default);
+
     Task<Camera?> GetByIdAsync(int id, CancellationToken ct = default);
     Task<Camera?> GetByNameAsync(string name, CancellationToken ct = default);
     Task<bool> AnyAsync(CancellationToken ct = default);

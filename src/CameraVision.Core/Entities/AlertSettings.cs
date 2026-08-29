@@ -7,13 +7,14 @@ public enum AlertChannel
 }
 
 /// <summary>
-/// Per-channel delivery configuration (one row per channel): master switch +
-/// recipients. What triggers an alert is decided by the capture rules
-/// (CaptureRule) and the health-alert settings — not here.
+/// Per-tenant, per-channel delivery configuration (one row per tenant+channel):
+/// master switch + recipients. What triggers an alert is decided by the capture
+/// rules (CaptureRule) and the health-alert settings — not here.
 /// </summary>
 public class AlertSettings
 {
     public int Id { get; set; }
+    public int TenantId { get; set; }
     public AlertChannel Channel { get; set; }
     public bool Enabled { get; set; }
 

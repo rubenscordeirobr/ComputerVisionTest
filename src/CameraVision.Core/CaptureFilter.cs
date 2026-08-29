@@ -5,6 +5,9 @@ namespace CameraVision.Core;
 /// <summary>Filter + paging for capture queries. Date bounds compare against StartedAt.</summary>
 public sealed record CaptureFilter
 {
+    /// <summary>Restrict to one tenant; null = all tenants (SuperAdmin views).</summary>
+    public int? TenantId { get; init; }
+
     public DateTime? DateFrom { get; init; }
 
     /// <summary>Exclusive upper bound.</summary>
