@@ -32,11 +32,21 @@ The HTML client never talks to the .NET app — it plays the processed streams
 # 2. Start MediaMTX
 docker compose up -d
 
-# 3. Run the app (from the repository root)
-dotnet run --project src/CameraVision
+# 3. Start the management API + web app (optional but recommended)
+dotnet run --project src/CameraVision.Api   # http://localhost:5220
+dotnet run --project src/CameraVision.Web   # http://localhost:5210
 
-# 4. Watch: open client/index.html in a browser
+# 4. Run the detection worker (from the repository root)
+dotnet run --project src/CameraVision.DetectionWorker
+
+# 5. Watch: open client/index.html in a browser
 ```
+
+The worker pulls cameras + capture rules from the API at startup, reports
+per-camera status, and registers each finished recording (with an annotated
+thumbnail) for instant alerts. When the API is down it falls back to
+`data/cameras.json` + the local `recording` settings, so surveillance never
+depends on the web stack. Camera/rule changes need a worker restart.
 
 At startup the app logs the selected provider, e.g.
 `Inference device: CUDA (NVIDIA GeForce RTX 5060)` or `Inference device: CPU`.
@@ -55,27 +65,38 @@ dotnet run --project src/CameraVision.Web
 
 - **Login**: initial user `admin` / password `admin2026` (stored hashed —
   reset it after the first login in *Usuários → Redefinir senha*). All pages
-  and the `/media` video routes require a signed-in user.
-- **Câmeras**: CRUD + health badges (ICMP ping for latency, TCP probe of the
-  stream port for online/offline). On the first run the cameras from
-  `data/cameras.json` are imported automatically.
-- **Capturas**: recordings under `output/` are imported automatically
-  (startup, every 60 s, and via *Reindexar*) by parsing the
-  `{date}/{camera}/{class}_{start}_to_{end}.mp4` naming; thumbnails are
-  extracted with ffmpeg. Play, download and delete work straight from the
-  browser.
-- **Alertas**: e-mail alerts are sent when a *fresh* capture (≤ 15 min old)
-  matches the configured classes — thumbnail embedded in the message plus a
-  link to the in-app playback page (`Sistema → URL pública` controls the link
-  host; SMTP is configured in *Sistema*). WhatsApp is configuration-only in
-  v1 (the Evolution API QR pairing screen works, sending comes later).
+  require a signed-in user; the same cookie also authorizes video streaming
+  from the API (`/media` on port 5220).
+- **Câmeras**: CRUD (incl. substream URL + preferred stream) + health badges
+  (ICMP ping for latency, TCP probe for online/offline), worker status column
+  and a per-camera health history dialog. First run imports
+  `data/cameras.json`.
+- **Regras de Captura**: multiple rules — each says which classes are
+  recorded, with which thresholds, and which alert channels fire (e.g.
+  "gato → e-mail", "pessoa → WhatsApp"). The worker applies the union of
+  enabled rules.
+- **Capturas**: registered instantly by the worker via the API (with an
+  annotated thumbnail); a background indexer reconciles pre-existing footage
+  every 60 s / via *Reindexar*. Play, download and delete in the browser
+  (files streamed by the API — `Api:MediaBaseUrl` in the web appsettings).
+- **Alertas**: capture alerts (thumbnail + playback link; SMTP in *Sistema*,
+  link host in *URL pública*) and **camera health alerts** — offline/weak
+  (latency threshold) with debounce, recovery notices, per-camera cooldown,
+  global flood cap and an optional digest that groups pending events
+  (precedence: cooldown → flood cap → digest; suppressed events stay in the
+  history and ride the next digest). WhatsApp remains configuration-only.
 - **Usuários**: admin-only user management (create, edit, deactivate, reset
   password).
 
+The API (`src/CameraVision.Api`, port 5220) serves the worker endpoints
+(`X-Api-Key`, default `cameravision-dev-key` — change it in both
+`src/CameraVision.Api/appsettings.json` and the root `appsettings.json`) and
+streams recordings to signed-in browsers.
+
 v1 limitations: SMTP/API secrets are stored unencrypted in SQLite (LAN use);
 failed alert sends are logged, not retried; deactivating a user does not
-terminate their already-open session; the detection pipeline still reads its
-own `appsettings.json` (the web app's capture settings do not drive it yet).
+terminate their already-open session; the worker reads cameras/rules only at
+startup (restart to apply changes).
 
 ## Camera definitions — `data/cameras.json`
 

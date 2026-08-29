@@ -11,9 +11,10 @@ Multi-camera computer-vision prototype: connects to RTSP cameras, runs YOLO26n d
 ```powershell
 .\scripts\download-model.ps1          # one-time: export ./models/yolo26n.onnx
 docker compose up -d                  # start MediaMTX
-dotnet run --project src/CameraVision # run the pipeline (from repo root)
-dotnet run --project src/CameraVision.Web # run the management web app → http://localhost:5210
-dotnet build ComputerVisionTest.slnx  # build everything (fails copying CameraVision.exe while the pipeline runs — build src/CameraVision.Web instead)
+dotnet run --project src/CameraVision.Api             # processor API + media streaming → http://localhost:5220
+dotnet run --project src/CameraVision.Web             # management web app → http://localhost:5210
+dotnet run --project src/CameraVision.DetectionWorker # detection worker (from repo root)
+dotnet build ComputerVisionTest.slnx  # build everything (fails copying a running exe — build individual projects while apps run)
 ```
 
 Watch streams via `client/index.html` (plays directly from MediaMTX, never from the .NET app).
@@ -21,22 +22,29 @@ Watch streams via `client/index.html` (plays directly from MediaMTX, never from 
 ## Architecture
 
 Solution `ComputerVisionTest.slnx` (central package management via
-`Directory.Packages.props`; shared props in `Directory.Build.props`), four projects:
+`Directory.Packages.props`; shared props in `Directory.Build.props`), five projects:
 
 - `src/CameraVision.Core` — domain entities, enums, repository/service interfaces
   (no dependencies).
-- `src/CameraVision.Infrastructure` — EF Core + SQLite (`data/database.db`,
-  migrations auto-applied), repositories, capture importer, alert channels
-  (MailKit email), Evolution API client.
+- `src/CameraVision.Infrastructure` — EF Core + SQLite (`data/database.db`, WAL,
+  migrations auto-applied), repositories, capture importer, rule-based alert
+  dispatcher + channels (MailKit email, WhatsApp stub), Evolution API client.
+- `src/CameraVision.Api` — minimal API (port 5220): worker endpoints
+  (`X-Api-Key`) for cameras/capture-rules/status/capture-ingest, and the media
+  streaming service (`/media`, authorized by the web app's cookie via a shared
+  Data Protection key ring at `data/keys`).
 - `src/CameraVision.Web` — Blazor Server (InteractiveServer) + MudBlazor 9
   management app, PT-BR UI: cookie auth (seeded `admin`/`admin2026`, login page is
-  static SSR), camera CRUD + health monitor, capture browser (`/media` static
-  files), settings pages, user management. Specs live in `./specs`.
-- `src/CameraVision` — the detection pipeline console app (below). It does NOT
-  read the web app's database yet — it keeps its own `appsettings.json`/
-  `data/cameras.json`.
+  static SSR), camera CRUD + health monitor + health alerting (debounce,
+  cooldown/flood cap/digest, event history), capture rules, capture browser
+  (media streamed from the API), settings pages, user management. Specs live in
+  `./specs`.
+- `src/CameraVision.DetectionWorker` — the detection pipeline console app
+  (below). Pulls cameras + capture rules from the API at startup (falls back to
+  `data/cameras.json` + local `appsettings.json` when the API is down), reports
+  camera status, and registers finished recordings + thumbnails via the API.
 
-Pipeline (`src/CameraVision`):
+Pipeline (`src/CameraVision.DetectionWorker`):
 
 - `Program.cs` — startup: loads `appsettings.json` + `data/cameras.json`, selects inference device (auto/cuda/cpu), spawns one `CameraPipeline` per enabled camera.
 - `CameraPipeline.cs` — per-camera loop: ffmpeg RTSP decode → freshest-frame queue → shared YOLO predictor (inference serialized across cameras) → annotate → publish to MediaMTX + hand frames to recording.
