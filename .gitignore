@@ -1,6 +1,7 @@
 bin/
 obj/
 output/
+data/database.db*
 cuda-runtime/
 models/*.pt
 models/*.onnx
