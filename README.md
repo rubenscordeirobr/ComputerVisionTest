@@ -63,30 +63,47 @@ dotnet run --project src/CameraVision.Web
 # then open http://localhost:5210
 ```
 
-- **Login**: initial user `admin` / password `admin2026` (stored hashed —
-  reset it after the first login in *Usuários → Redefinir senha*). All pages
-  require a signed-in user; the same cookie also authorizes video streaming
-  from the API (`/media` on port 5220).
+- **Login**: seeded users (hashed passwords — reset them after the first
+  login in *Usuários → Redefinir senha*):
+  - `admin` / `admin2026` — **SuperAdmin** (platform operator, no tenant).
+  - `rubens.cordeiro@live.com.br` / `test` — **Admin** of the first tenant
+    ("Rubens Cordeiro"), which owns all pre-existing data.
+
+  All pages require a signed-in user; the same cookie also authorizes video
+  streaming from the API (`/media` on port 5220), restricted to the user's
+  own tenant footage.
+- **Multi-tenant (SPEC-14)**: every camera, rule, capture, health event and
+  recipient list belongs to an **Empresa** (tenant). Roles: *Usuário*
+  (viewer), *Administrador* (manages their tenant's data + users) and
+  *Superadmin* (manages tenants + system settings, sees everything). The
+  SuperAdmin manages tenants in **Empresas** (create, edit,
+  activate/deactivate — users of a deactivated tenant cannot sign in).
 - **Câmeras**: CRUD (incl. substream URL + preferred stream) + health badges
   (ICMP ping for latency, TCP probe for online/offline), worker status column
   and a per-camera health history dialog. First run imports
   `data/cameras.json`.
-- **Regras de Captura**: multiple rules — each says which classes are
-  recorded, with which thresholds, and which alert channels fire (e.g.
-  "gato → e-mail", "pessoa → WhatsApp"). The worker applies the union of
-  enabled rules.
+- **Regras de Captura**: multiple rules per tenant — each says which classes
+  are recorded, with which thresholds, and which alert channels fire (e.g.
+  "gato → e-mail", "pessoa → WhatsApp"). The worker applies the union of all
+  tenants' enabled rules; a capture only *alerts* through its own tenant's
+  rules and recipients.
 - **Capturas**: registered instantly by the worker via the API (with an
   annotated thumbnail); a background indexer reconciles pre-existing footage
   every 60 s / via *Reindexar*. Play, download and delete in the browser
   (files streamed by the API — `Api:MediaBaseUrl` in the web appsettings).
-- **Alertas**: capture alerts (thumbnail + playback link; SMTP in *Sistema*,
-  link host in *URL pública*) and **camera health alerts** — offline/weak
-  (latency threshold) with debounce, recovery notices, per-camera cooldown,
-  global flood cap and an optional digest that groups pending events
-  (precedence: cooldown → flood cap → digest; suppressed events stay in the
-  history and ride the next digest). WhatsApp remains configuration-only.
+- **Alertas**: per-tenant channel recipients; capture alerts (thumbnail +
+  playback link; SMTP in *Sistema*, link host in *URL pública*) and **camera
+  health alerts** — offline/weak (latency threshold) with debounce, recovery
+  notices, per-camera cooldown, global flood cap and an optional digest that
+  groups pending events per tenant (precedence: cooldown → flood cap →
+  digest; suppressed events stay in the history and ride the next digest).
+  Health tuning and the capture anti-flood are system settings (SuperAdmin).
+  WhatsApp remains configuration-only.
 - **Usuários**: admin-only user management (create, edit, deactivate, reset
-  password).
+  password). Tenant admins manage their own tenant; the SuperAdmin manages
+  everyone and assigns tenants/roles.
+- **Empresas** / **Sistema**: SuperAdmin-only — tenant management and the
+  system configuration (SMTP, Evolution/WhatsApp, public URL).
 
 The API (`src/CameraVision.Api`, port 5220) serves the worker endpoints
 (`X-Api-Key`, default `cameravision-dev-key` — change it in both

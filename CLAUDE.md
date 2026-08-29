@@ -34,11 +34,14 @@ Solution `ComputerVisionTest.slnx` (central package management via
   streaming service (`/media`, authorized by the web app's cookie via a shared
   Data Protection key ring at `data/keys`).
 - `src/CameraVision.Web` — Blazor Server (InteractiveServer) + MudBlazor 9
-  management app, PT-BR UI: cookie auth (seeded `admin`/`admin2026`, login page is
-  static SSR), camera CRUD + health monitor + health alerting (debounce,
-  cooldown/flood cap/digest, event history), capture rules, capture browser
-  (media streamed from the API), settings pages, user management. Specs live in
-  `./specs`.
+  management app, PT-BR UI: cookie auth (login page is static SSR), camera CRUD
+  + health monitor + health alerting (debounce, cooldown/flood cap/digest, event
+  history), capture rules, capture browser (media streamed from the API),
+  settings pages, user management. **Multi-tenant** (SPEC-14): data is scoped by
+  `TenantId` ("Empresa" in the UI); roles User/Admin/SuperAdmin — seeded
+  `admin`/`admin2026` is the tenant-less SuperAdmin (manages tenants + system
+  settings), `rubens.cordeiro@live.com.br`/`test` is the first tenant's admin.
+  Specs live in `./specs`.
 - `src/CameraVision.DetectionWorker` — the detection pipeline console app
   (below). Pulls cameras + capture rules from the API at startup (falls back to
   `data/cameras.json` + local `appsettings.json` when the API is down), reports
