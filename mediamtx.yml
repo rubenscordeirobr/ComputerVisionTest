@@ -1,0 +1,48 @@
+# MediaMTX configuration for the annotated-stream prototype.
+#
+# Values you may need to adjust:
+#   - webrtcAdditionalHosts: IPs the WebRTC clients use to reach this machine.
+#     127.0.0.1 covers browsers on this PC; 192.168.3.2 is this machine's LAN IP —
+#     change it if your host IP differs (ipconfig) or remove it if you only watch locally.
+#   - Ports must match docker-compose.yml if you change them.
+
+logLevel: info
+
+# Tolerate stalls in publishers (cameras with glitchy streams can pause the
+# annotated feed for several seconds while ffmpeg skips corrupted frames).
+readTimeout: 30s
+writeTimeout: 30s
+
+api: yes
+apiAddress: :9997
+
+# No authentication (prototype, LAN only): publish/read/API open to everyone.
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+      - action: api
+
+rtsp: yes
+rtspAddress: :8554
+
+hls: yes
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcAdditionalHosts: [127.0.0.1, 192.168.3.2]
+
+rtmp: no
+srt: no
+
+paths:
+  # Accept any published path, including annotated/{camera_name} from the .NET app.
+  all_others:
