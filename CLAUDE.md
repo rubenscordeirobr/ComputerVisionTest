@@ -11,15 +11,32 @@ Multi-camera computer-vision prototype: connects to RTSP cameras, runs YOLO26n d
 ```powershell
 .\scripts\download-model.ps1          # one-time: export ./models/yolo26n.onnx
 docker compose up -d                  # start MediaMTX
-dotnet run --project src/CameraVision # run the app (from repo root)
-dotnet build src/CameraVision         # build only
+dotnet run --project src/CameraVision # run the pipeline (from repo root)
+dotnet run --project src/CameraVision.Web # run the management web app → http://localhost:5210
+dotnet build ComputerVisionTest.slnx  # build everything (fails copying CameraVision.exe while the pipeline runs — build src/CameraVision.Web instead)
 ```
 
 Watch streams via `client/index.html` (plays directly from MediaMTX, never from the .NET app).
 
 ## Architecture
 
-Single .NET 10 console app in `src/CameraVision`:
+Solution `ComputerVisionTest.slnx` (central package management via
+`Directory.Packages.props`; shared props in `Directory.Build.props`), four projects:
+
+- `src/CameraVision.Core` — domain entities, enums, repository/service interfaces
+  (no dependencies).
+- `src/CameraVision.Infrastructure` — EF Core + SQLite (`data/database.db`,
+  migrations auto-applied), repositories, capture importer, alert channels
+  (MailKit email), Evolution API client.
+- `src/CameraVision.Web` — Blazor Server (InteractiveServer) + MudBlazor 9
+  management app, PT-BR UI: cookie auth (seeded `admin`/`admin2026`, login page is
+  static SSR), camera CRUD + health monitor, capture browser (`/media` static
+  files), settings pages, user management. Specs live in `./specs`.
+- `src/CameraVision` — the detection pipeline console app (below). It does NOT
+  read the web app's database yet — it keeps its own `appsettings.json`/
+  `data/cameras.json`.
+
+Pipeline (`src/CameraVision`):
 
 - `Program.cs` — startup: loads `appsettings.json` + `data/cameras.json`, selects inference device (auto/cuda/cpu), spawns one `CameraPipeline` per enabled camera.
 - `CameraPipeline.cs` — per-camera loop: ffmpeg RTSP decode → freshest-frame queue → shared YOLO predictor (inference serialized across cameras) → annotate → publish to MediaMTX + hand frames to recording.

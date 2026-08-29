@@ -41,6 +41,42 @@ dotnet run --project src/CameraVision
 At startup the app logs the selected provider, e.g.
 `Inference device: CUDA (NVIDIA GeForce RTX 5060)` or `Inference device: CPU`.
 
+## Management web app — `src/CameraVision.Web`
+
+Blazor Server app (MudBlazor, PT-BR UI) to manage cameras, browse recorded
+captures, and configure capture rules, alerts and system settings. Data lives
+in SQLite at `data/database.db` — created, migrated and seeded automatically
+on startup.
+
+```powershell
+dotnet run --project src/CameraVision.Web
+# then open http://localhost:5210
+```
+
+- **Login**: initial user `admin` / password `admin2026` (stored hashed —
+  reset it after the first login in *Usuários → Redefinir senha*). All pages
+  and the `/media` video routes require a signed-in user.
+- **Câmeras**: CRUD + health badges (ICMP ping for latency, TCP probe of the
+  stream port for online/offline). On the first run the cameras from
+  `data/cameras.json` are imported automatically.
+- **Capturas**: recordings under `output/` are imported automatically
+  (startup, every 60 s, and via *Reindexar*) by parsing the
+  `{date}/{camera}/{class}_{start}_to_{end}.mp4` naming; thumbnails are
+  extracted with ffmpeg. Play, download and delete work straight from the
+  browser.
+- **Alertas**: e-mail alerts are sent when a *fresh* capture (≤ 15 min old)
+  matches the configured classes — thumbnail embedded in the message plus a
+  link to the in-app playback page (`Sistema → URL pública` controls the link
+  host; SMTP is configured in *Sistema*). WhatsApp is configuration-only in
+  v1 (the Evolution API QR pairing screen works, sending comes later).
+- **Usuários**: admin-only user management (create, edit, deactivate, reset
+  password).
+
+v1 limitations: SMTP/API secrets are stored unencrypted in SQLite (LAN use);
+failed alert sends are logged, not retried; deactivating a user does not
+terminate their already-open session; the detection pipeline still reads its
+own `appsettings.json` (the web app's capture settings do not drive it yet).
+
 ## Camera definitions — `data/cameras.json`
 
 An array of camera objects. Only `name` and `rtspUrl` are required by the app;
