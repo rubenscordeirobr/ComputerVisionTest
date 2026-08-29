@@ -102,8 +102,9 @@ dotnet run --project src/CameraVision.Web
 - **Usuários**: admin-only user management (create, edit, deactivate, reset
   password). Tenant admins manage their own tenant; the SuperAdmin manages
   everyone and assigns tenants/roles.
-- **Clientes** / **Sistema**: SuperAdmin-only — tenant management and the
-  system configuration (SMTP, Evolution/WhatsApp, public URL).
+- **Clientes** / **Sistema**: SuperAdmin-only — tenant management (creating a
+  client also creates its admin user, atomically) and the system
+  configuration (SMTP, Evolution/WhatsApp, public URL).
 
 The API (`src/CameraVision.Api`, port 5220) serves the worker endpoints
 (`X-Api-Key`, default `cameravision-dev-key` — change it in both

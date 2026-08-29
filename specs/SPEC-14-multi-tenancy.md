@@ -36,7 +36,9 @@ First tenant seeded from the current installation:
   and `SuperAdmin`; login blocked when the user's tenant is deactivated.
 - Web refactor:
   - **/tenants** ("Clientes") — SuperAdmin-only CRUD (create, edit, activate/
-    deactivate; no delete).
+    deactivate; no delete). Creating a tenant also collects and creates its
+    first **admin user** in the same transaction — a tenant must never exist
+    without someone able to sign in to it.
   - **/system-settings** ("Sistema") — SuperAdmin-only.
   - **/users** — tenant admins see/manage only their tenant; SuperAdmin sees
     all users, picks tenant + role (only SuperAdmin can grant SuperAdmin).
