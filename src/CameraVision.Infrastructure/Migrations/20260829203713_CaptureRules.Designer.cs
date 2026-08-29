@@ -3,6 +3,7 @@ using System;
 using CameraVision.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CameraVision.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260829203713_CaptureRules")]
+    partial class CaptureRules
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -100,24 +103,8 @@ namespace CameraVision.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("PreferredStream")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ProcessorStatus")
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("ProcessorStatusAt")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("StreamUrl")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SubStreamUrl")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
@@ -129,65 +116,11 @@ namespace CameraVision.Infrastructure.Migrations
                     b.ToTable("Cameras");
                 });
 
-            modelBuilder.Entity("CameraVision.Core.Entities.CameraHealthEvent", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("CameraId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("CameraName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Condition")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Detail")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("DigestedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("NotifiedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("OccurredAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("Suppressed")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OccurredAt");
-
-                    b.HasIndex("CameraId", "OccurredAt");
-
-                    b.ToTable("CameraHealthEvents");
-                });
-
             modelBuilder.Entity("CameraVision.Core.Entities.Capture", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
-
-                    b.Property<string>("AlertChannels")
-                        .HasMaxLength(50)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("AlertQueuedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("AlertSentAt")
-                        .HasColumnType("TEXT");
 
                     b.Property<int?>("CameraId")
                         .HasColumnType("INTEGER");
@@ -245,36 +178,11 @@ namespace CameraVision.Infrastructure.Migrations
                     b.ToTable("Captures");
                 });
 
-            modelBuilder.Entity("CameraVision.Core.Entities.CaptureAlertSettings", b =>
-                {
-                    b.Property<int>("Id")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("GroupWindowMinutes")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("GroupingEnabled")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("LastDigestAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("CaptureAlertSettings");
-                });
-
             modelBuilder.Entity("CameraVision.Core.Entities.CaptureRule", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
-
-                    b.Property<TimeOnly?>("ActiveFrom")
-                        .HasColumnType("TEXT");
-
-                    b.Property<TimeOnly?>("ActiveTo")
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("Classes")
                         .IsRequired()
@@ -309,52 +217,6 @@ namespace CameraVision.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("CaptureRules");
-                });
-
-            modelBuilder.Entity("CameraVision.Core.Entities.HealthAlertSettings", b =>
-                {
-                    b.Property<int>("Id")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("ConsecutiveChecks")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("CooldownMinutes")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("DigestEnabled")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("DigestIntervalMinutes")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("FloodCapCount")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("FloodCapWindowMinutes")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("LastDigestAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("NotifyEmail")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("NotifyRecovery")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("NotifyWhatsApp")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("WeakLatencyMs")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("HealthAlertSettings");
                 });
 
             modelBuilder.Entity("CameraVision.Core.Entities.SystemSettings", b =>
@@ -409,14 +271,6 @@ namespace CameraVision.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("SystemSettings");
-                });
-
-            modelBuilder.Entity("CameraVision.Core.Entities.CameraHealthEvent", b =>
-                {
-                    b.HasOne("CameraVision.Core.Entities.Camera", null)
-                        .WithMany()
-                        .HasForeignKey("CameraId")
-                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("CameraVision.Core.Entities.Capture", b =>

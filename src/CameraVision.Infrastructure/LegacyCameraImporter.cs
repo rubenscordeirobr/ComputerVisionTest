@@ -22,8 +22,7 @@ public static class LegacyCameraImporter
             if (await cameras.AnyAsync(ct) || !File.Exists(camerasJsonPath))
                 return;
 
-            await using var stream = File.OpenRead(camerasJsonPath);
-            var entries = await JsonSerializer.DeserializeAsync<List<LegacyCamera>>(stream, _json, ct) ?? [];
+            var entries = await ReadEntriesAsync(camerasJsonPath, ct);
 
             var imported = 0;
             foreach (var entry in entries)
@@ -34,6 +33,8 @@ public static class LegacyCameraImporter
                 {
                     Name = entry.Name.Trim(),
                     StreamUrl = entry.RtspUrl?.Trim() ?? "",
+                    SubStreamUrl = string.IsNullOrWhiteSpace(entry.SubRtspUrl) ? null : entry.SubRtspUrl.Trim(),
+                    PreferredStream = entry.Stream?.Trim().ToLowerInvariant() == "sub" ? "sub" : "main",
                     IpAddress = string.IsNullOrWhiteSpace(entry.IpAddress) ? null : entry.IpAddress.Trim(),
                     Enabled = entry.Enabled ?? true,
                 }, ct);
@@ -49,5 +50,53 @@ public static class LegacyCameraImporter
         }
     }
 
-    private sealed record LegacyCamera(string? Name, string? RtspUrl, string? IpAddress, bool? Enabled);
+    /// <summary>
+    /// One-time backfill for databases created before the substream fields existed:
+    /// cameras matched by name get SubStreamUrl/PreferredStream (and IP) from the JSON.
+    /// </summary>
+    public static async Task EnrichFromLegacyAsync(
+        ICameraRepository cameras, string camerasJsonPath, ILogger logger, CancellationToken ct = default)
+    {
+        try
+        {
+            if (!File.Exists(camerasJsonPath))
+                return;
+            var entries = await ReadEntriesAsync(camerasJsonPath, ct);
+
+            var enriched = 0;
+            foreach (var camera in await cameras.GetAllAsync(ct))
+            {
+                if (camera.SubStreamUrl != null)
+                    continue;
+                var entry = entries.FirstOrDefault(e =>
+                    string.Equals(e.Name?.Trim(), camera.Name, StringComparison.OrdinalIgnoreCase));
+                if (entry == null || string.IsNullOrWhiteSpace(entry.SubRtspUrl))
+                    continue;
+
+                camera.SubStreamUrl = entry.SubRtspUrl.Trim();
+                camera.PreferredStream = entry.Stream?.Trim().ToLowerInvariant() == "sub" ? "sub" : "main";
+                camera.IpAddress ??= string.IsNullOrWhiteSpace(entry.IpAddress) ? null : entry.IpAddress.Trim();
+                await cameras.UpdateAsync(camera, ct);
+                enriched++;
+            }
+
+            if (enriched > 0)
+                logger.LogInformation("Enriched {Count} camera(s) with substream data from {Path}.",
+                    enriched, camerasJsonPath);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Legacy camera enrichment failed (non-fatal).");
+        }
+    }
+
+    private static async Task<List<LegacyCamera>> ReadEntriesAsync(string path, CancellationToken ct)
+    {
+        await using var stream = File.OpenRead(path);
+        return await JsonSerializer.DeserializeAsync<List<LegacyCamera>>(stream, _json, ct) ?? [];
+    }
+
+    private sealed record LegacyCamera(
+        string? Name, string? RtspUrl, string? SubRtspUrl, string? Stream,
+        string? IpAddress, bool? Enabled);
 }

@@ -12,12 +12,12 @@ public sealed class WhatsAppAlertChannel(ILogger<WhatsAppAlertChannel> logger) :
 {
     public AlertChannel Channel => AlertChannel.WhatsApp;
 
-    public Task<bool> TrySendAsync(CaptureAlert alert, AlertSettings rules,
+    public Task<bool> TrySendAsync(AlertMessage message, AlertSettings settings,
         SystemSettings system, CancellationToken ct = default)
     {
         logger.LogInformation(
-            "WhatsApp alert for capture {CaptureId} skipped — sending is not implemented in v1.",
-            alert.Capture.Id);
+            "WhatsApp alert \"{Subject}\" skipped — sending is not implemented in v1.",
+            message.Subject);
         return Task.FromResult(false);
     }
 }

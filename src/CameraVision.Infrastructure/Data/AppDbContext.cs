@@ -9,10 +9,13 @@ namespace CameraVision.Infrastructure.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Camera> Cameras => Set<Camera>();
-    public DbSet<CaptureSettings> CaptureSettings => Set<CaptureSettings>();
+    public DbSet<CaptureRule> CaptureRules => Set<CaptureRule>();
     public DbSet<Capture> Captures => Set<Capture>();
     public DbSet<AlertSettings> AlertSettings => Set<AlertSettings>();
+    public DbSet<CaptureAlertSettings> CaptureAlertSettings => Set<CaptureAlertSettings>();
     public DbSet<SystemSettings> SystemSettings => Set<SystemSettings>();
+    public DbSet<HealthAlertSettings> HealthAlertSettings => Set<HealthAlertSettings>();
+    public DbSet<CameraHealthEvent> CameraHealthEvents => Set<CameraHealthEvent>();
     public DbSet<AppUser> Users => Set<AppUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -31,13 +34,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.Name).HasMaxLength(100).IsRequired();
             e.HasIndex(c => c.Name).IsUnique();
             e.Property(c => c.StreamUrl).HasMaxLength(500).IsRequired();
+            e.Property(c => c.SubStreamUrl).HasMaxLength(500);
+            e.Property(c => c.PreferredStream).HasMaxLength(10).IsRequired();
             e.Property(c => c.IpAddress).HasMaxLength(64);
+            e.Property(c => c.ProcessorStatus).HasMaxLength(20);
         });
 
-        modelBuilder.Entity<CaptureSettings>(e =>
+        modelBuilder.Entity<CaptureRule>(e =>
         {
-            e.Property(s => s.Id).ValueGeneratedNever();
-            e.Property(s => s.TrackedClasses)
+            e.Property(r => r.Name).HasMaxLength(100).IsRequired();
+            e.Property(r => r.Classes)
                 .HasConversion(stringListConverter)
                 .Metadata.SetValueComparer(stringListComparer);
         });
@@ -48,6 +54,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.ObjectClass).HasMaxLength(100).IsRequired();
             e.Property(c => c.FilePath).HasMaxLength(500).IsRequired();
             e.Property(c => c.ThumbnailPath).HasMaxLength(500);
+            e.Property(c => c.AlertChannels).HasMaxLength(50);
             e.HasIndex(c => c.FilePath).IsUnique();
             e.HasIndex(c => c.StartedAt);
             e.HasIndex(c => c.CameraName);
@@ -65,15 +72,35 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.Recipients)
                 .HasConversion(stringListConverter)
                 .Metadata.SetValueComparer(stringListComparer);
-            e.Property(s => s.TriggerClasses)
-                .HasConversion(stringListConverter)
-                .Metadata.SetValueComparer(stringListComparer);
         });
 
         modelBuilder.Entity<SystemSettings>(e =>
         {
             e.Property(s => s.Id).ValueGeneratedNever();
             e.Property(s => s.SmtpSecurity).HasConversion<string>().HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<HealthAlertSettings>(e =>
+        {
+            e.Property(s => s.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<CaptureAlertSettings>(e =>
+        {
+            e.Property(s => s.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<CameraHealthEvent>(e =>
+        {
+            e.Property(h => h.CameraName).HasMaxLength(100).IsRequired();
+            e.Property(h => h.Condition).HasConversion<string>().HasMaxLength(20);
+            e.Property(h => h.Detail).HasMaxLength(200);
+            e.HasIndex(h => new { h.CameraId, h.OccurredAt });
+            e.HasIndex(h => h.OccurredAt);
+            e.HasOne<Camera>()
+                .WithMany()
+                .HasForeignKey(h => h.CameraId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<AppUser>(e =>

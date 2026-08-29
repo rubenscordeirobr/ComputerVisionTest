@@ -39,10 +39,23 @@ public class CaptureRepository(IDbContextFactory<AppDbContext> factory) : ICaptu
         return await db.Captures.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct);
     }
 
+    public async Task<Capture?> GetByFilePathAsync(string filePath, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.Captures.AsNoTracking().FirstOrDefaultAsync(c => c.FilePath == filePath, ct);
+    }
+
     public async Task AddRangeAsync(IEnumerable<Capture> captures, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
         db.Captures.AddRange(captures);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateAsync(Capture capture, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        db.Captures.Update(capture);
         await db.SaveChangesAsync(ct);
     }
 
@@ -88,5 +101,26 @@ public class CaptureRepository(IDbContextFactory<AppDbContext> factory) : ICaptu
         if (startedAtOrAfter is { } from)
             query = query.Where(c => c.StartedAt >= from);
         return await query.CountAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Capture>> GetPendingAlertsAsync(int take, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.Captures.AsNoTracking()
+            .Where(c => c.AlertQueuedAt != null && c.AlertSentAt == null)
+            .OrderBy(c => c.AlertQueuedAt)
+            .Take(take)
+            .ToListAsync(ct);
+    }
+
+    public async Task MarkAlertsSentAsync(IEnumerable<int> ids, DateTime sentAt, CancellationToken ct = default)
+    {
+        var idList = ids.ToList();
+        if (idList.Count == 0)
+            return;
+        await using var db = await factory.CreateDbContextAsync(ct);
+        await db.Captures
+            .Where(c => idList.Contains(c.Id))
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.AlertSentAt, sentAt), ct);
     }
 }

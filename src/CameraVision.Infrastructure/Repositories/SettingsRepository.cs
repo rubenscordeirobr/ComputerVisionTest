@@ -7,25 +7,6 @@ namespace CameraVision.Infrastructure.Repositories;
 
 public class SettingsRepository(IDbContextFactory<AppDbContext> factory) : ISettingsRepository
 {
-    public async Task<CaptureSettings> GetCaptureSettingsAsync(CancellationToken ct = default)
-    {
-        await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.CaptureSettings.AsNoTracking().FirstOrDefaultAsync(ct)
-               ?? new CaptureSettings { Id = 1 };
-    }
-
-    public async Task SaveCaptureSettingsAsync(CaptureSettings settings, CancellationToken ct = default)
-    {
-        settings.Id = 1;
-        await using var db = await factory.CreateDbContextAsync(ct);
-        var existing = await db.CaptureSettings.FirstOrDefaultAsync(ct);
-        if (existing == null)
-            db.Add(settings);
-        else
-            db.Entry(existing).CurrentValues.SetValues(settings);
-        await db.SaveChangesAsync(ct);
-    }
-
     public async Task<AlertSettings> GetAlertSettingsAsync(AlertChannel channel, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
@@ -46,6 +27,44 @@ public class SettingsRepository(IDbContextFactory<AppDbContext> factory) : ISett
             settings.Id = existing.Id;
             db.Entry(existing).CurrentValues.SetValues(settings);
         }
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<HealthAlertSettings> GetHealthAlertSettingsAsync(CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.HealthAlertSettings.AsNoTracking().FirstOrDefaultAsync(ct)
+               ?? new HealthAlertSettings { Id = 1 };
+    }
+
+    public async Task SaveHealthAlertSettingsAsync(HealthAlertSettings settings, CancellationToken ct = default)
+    {
+        settings.Id = 1;
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var existing = await db.HealthAlertSettings.FirstOrDefaultAsync(ct);
+        if (existing == null)
+            db.Add(settings);
+        else
+            db.Entry(existing).CurrentValues.SetValues(settings);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<CaptureAlertSettings> GetCaptureAlertSettingsAsync(CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.CaptureAlertSettings.AsNoTracking().FirstOrDefaultAsync(ct)
+               ?? new CaptureAlertSettings { Id = 1 };
+    }
+
+    public async Task SaveCaptureAlertSettingsAsync(CaptureAlertSettings settings, CancellationToken ct = default)
+    {
+        settings.Id = 1;
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var existing = await db.CaptureAlertSettings.FirstOrDefaultAsync(ct);
+        if (existing == null)
+            db.Add(settings);
+        else
+            db.Entry(existing).CurrentValues.SetValues(settings);
         await db.SaveChangesAsync(ct);
     }
 

@@ -3,6 +3,7 @@ using System;
 using CameraVision.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CameraVision.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260829215156_CaptureRuleTimeWindows")]
+    partial class CaptureRuleTimeWindows
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -179,16 +182,6 @@ namespace CameraVision.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("AlertChannels")
-                        .HasMaxLength(50)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("AlertQueuedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("AlertSentAt")
-                        .HasColumnType("TEXT");
-
                     b.Property<int?>("CameraId")
                         .HasColumnType("INTEGER");
 
@@ -243,25 +236,6 @@ namespace CameraVision.Infrastructure.Migrations
                     b.HasIndex("StartedAt");
 
                     b.ToTable("Captures");
-                });
-
-            modelBuilder.Entity("CameraVision.Core.Entities.CaptureAlertSettings", b =>
-                {
-                    b.Property<int>("Id")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("GroupWindowMinutes")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("GroupingEnabled")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("LastDigestAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("CaptureAlertSettings");
                 });
 
             modelBuilder.Entity("CameraVision.Core.Entities.CaptureRule", b =>

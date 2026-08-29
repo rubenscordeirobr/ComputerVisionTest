@@ -15,6 +15,9 @@ public static class DbInitializer
         await using var db = await factory.CreateDbContextAsync(ct);
         await db.Database.MigrateAsync(ct);
 
+        // Two processes (Web + Api) share this file; WAL persists once set.
+        await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", ct);
+
         if (!await db.Users.AnyAsync(ct))
         {
             var admin = new AppUser
@@ -28,11 +31,18 @@ public static class DbInitializer
             db.Add(admin);
         }
 
-        if (!await db.CaptureSettings.AnyAsync(ct))
-            db.Add(new CaptureSettings { Id = 1 });
+        // Fresh databases start with one sensible rule (migrated installs keep their data).
+        if (!await db.CaptureRules.AnyAsync(ct))
+            db.Add(new CaptureRule { Name = "Pessoas", Classes = ["person"] });
 
         if (!await db.SystemSettings.AnyAsync(ct))
             db.Add(new SystemSettings { Id = 1 });
+
+        if (!await db.HealthAlertSettings.AnyAsync(ct))
+            db.Add(new HealthAlertSettings { Id = 1 });
+
+        if (!await db.CaptureAlertSettings.AnyAsync(ct))
+            db.Add(new CaptureAlertSettings { Id = 1 });
 
         foreach (var channel in new[] { AlertChannel.Email, AlertChannel.WhatsApp })
         {
