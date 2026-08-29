@@ -4,10 +4,23 @@ using CameraVision.Video;
 
 namespace CameraVision.Recording;
 
+/// <summary>A finished recording file plus the raw annotated frame kept for its thumbnail.</summary>
+public sealed record CompletedRecording(
+    string FilePath,
+    string ClassName,
+    int TrackId,
+    DateTime StartedAt,
+    DateTime EndedAt,
+    bool IsMerged,
+    byte[]? RawFrame,
+    int Width,
+    int Height);
+
 /// <summary>
 /// Records the annotated frames of one tracked object (one tracking ID) into
 /// MP4 segments of at most maxSegmentSeconds each, and merges them into a single
-/// "_full" video when the track ends.
+/// "_full" video when the track ends. Finished files are announced through
+/// onCompleted (used to register captures via the API).
 /// </summary>
 public sealed class TrackRecorder(
     string cameraName,
@@ -16,7 +29,8 @@ public sealed class TrackRecorder(
     int width,
     int height,
     string outputRoot,
-    int maxSegmentSeconds)
+    int maxSegmentSeconds,
+    Action<CompletedRecording>? onCompleted = null)
 {
     private readonly List<string> _segmentPaths = [];
     private readonly string _logSource = $"{cameraName}/rec#{trackId}";
@@ -26,6 +40,8 @@ public sealed class TrackRecorder(
     private DateTime _segmentStart;
     private DateTime _trackStart;
     private bool _failed;
+    private byte[]? _segmentFirstFrame;
+    private byte[]? _trackFirstFrame;
 
     public void WriteFrame(byte[] frame, DateTime now)
     {
@@ -43,6 +59,9 @@ public sealed class TrackRecorder(
             CloseSegment(now);
             StartSegment(now);
         }
+
+        _segmentFirstFrame ??= frame;
+        _trackFirstFrame ??= frame;
 
         try
         {
@@ -75,14 +94,22 @@ public sealed class TrackRecorder(
             $"{className}_{_trackStart:HH-mm-ss}_to_{now:HH-mm-ss}_full.mp4"));
 
         if (await Ffmpeg.ConcatAsync(_segmentPaths, mergedPath, _logSource))
+        {
             Log.Info(_logSource, $"Merged track video saved: {mergedPath}");
+            onCompleted?.Invoke(new CompletedRecording(
+                mergedPath, className, trackId, _trackStart, now, IsMerged: true,
+                _trackFirstFrame, width, height));
+        }
         else
+        {
             Log.Error(_logSource, "Failed to merge track segments.");
+        }
     }
 
     private void StartSegment(DateTime now)
     {
         _segmentStart = now;
+        _segmentFirstFrame = null;
         var directory = Path.Combine(outputRoot,
             now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), cameraName);
         Directory.CreateDirectory(directory);
@@ -120,6 +147,9 @@ public sealed class TrackRecorder(
             File.Move(_currentTempPath, finalPath);
             _segmentPaths.Add(finalPath);
             Log.Info(_logSource, $"Segment saved: {finalPath}");
+            onCompleted?.Invoke(new CompletedRecording(
+                finalPath, className, trackId, _segmentStart, end, IsMerged: false,
+                _segmentFirstFrame, width, height));
         }
         catch (Exception ex)
         {

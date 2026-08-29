@@ -8,10 +8,11 @@ namespace CameraVision.Recording;
 /// recording confidence threshold at least once) is alive, its annotated frames are written
 /// through a TrackRecorder. When the track dies the recorder is finished and merged.
 /// </summary>
-public sealed class RecordingManager(string cameraName, int width, int height, RecordingConfig config, string outputRoot)
+public sealed class RecordingManager(
+    string cameraName, int width, int height, RecordingConfig config, string outputRoot,
+    Action<CompletedRecording>? onCompleted = null)
 {
     private readonly Dictionary<int, TrackRecorder> _recorders = [];
-    private readonly HashSet<string> _trackClasses = new(config.TrackClasses, StringComparer.OrdinalIgnoreCase);
 
     public int ActiveRecordings => _recorders.Count;
 
@@ -21,7 +22,9 @@ public sealed class RecordingManager(string cameraName, int width, int height, R
 
         foreach (var track in liveTracks)
         {
-            if (!_trackClasses.Contains(track.ClassName) || track.MaxConfidence < config.ConfidenceThreshold)
+            // Null threshold = class untracked or all matching rules outside their time window.
+            var threshold = config.ActiveThresholdFor(track.ClassName, now);
+            if (threshold == null || track.MaxConfidence < threshold.Value)
                 continue;
 
             (liveRecordableIds ??= []).Add(track.Id);
@@ -29,7 +32,7 @@ public sealed class RecordingManager(string cameraName, int width, int height, R
             if (!_recorders.TryGetValue(track.Id, out var recorder))
             {
                 recorder = new TrackRecorder(cameraName, track.Id, track.ClassName,
-                    width, height, outputRoot, config.MaxSegmentSeconds);
+                    width, height, outputRoot, config.MaxSegmentSeconds, onCompleted);
                 _recorders[track.Id] = recorder;
                 Log.Info(cameraName, $"Recording started: {track.ClassName} #{track.Id} " +
                                      $"(confidence {track.Confidence:0.00})");

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CameraVision.ApiClient;
 
 namespace CameraVision.Config;
 
@@ -13,6 +14,9 @@ public sealed class AppConfig
     public DetectionConfig Detection { get; set; } = new();
     public MediaMtxConfig MediaMtx { get; set; } = new();
     public RecordingConfig Recording { get; set; } = new();
+
+    /// <summary>CameraVision.Api integration; cameras.json/recording act as fallback when unreachable.</summary>
+    public ApiConfig Api { get; set; } = new();
 
     /// <summary>Directory that relative paths in this config are resolved against.</summary>
     public string BaseDir { get; set; } = ".";
@@ -52,7 +56,7 @@ public sealed class AppConfig
 
         throw new FileNotFoundException(
             "appsettings.json not found in the current directory, its parents, or next to the executable. " +
-            "Run the app from the repository root (dotnet run --project src/CameraVision).");
+            "Run the app from the repository root (dotnet run --project src/CameraVision.DetectionWorker).");
     }
 }
 
@@ -79,6 +83,31 @@ public sealed class RecordingConfig
     /// <summary>A track starts recording once its confidence reaches this value at least once.</summary>
     public float ConfidenceThreshold { get; set; } = 0.5f;
 
+    /// <summary>Rules fetched from the API (with optional time-of-day windows). Null = JSON fallback.</summary>
+    public List<RecordingRule>? Rules { get; set; }
+
+    /// <summary>
+    /// Threshold to record <paramref name="className"/> right now, or null when nothing
+    /// applies (class untracked, or every matching rule is outside its time window).
+    /// </summary>
+    public float? ActiveThresholdFor(string className, DateTime now)
+    {
+        if (Rules == null)
+            return TrackClasses.Contains(className, StringComparer.OrdinalIgnoreCase)
+                ? ConfidenceThreshold
+                : null;
+
+        var time = TimeOnly.FromDateTime(now);
+        float? min = null;
+        foreach (var rule in Rules)
+        {
+            if (rule.Classes.Contains(className) && rule.IsActiveAt(time) &&
+                (min == null || rule.ConfidenceThreshold < min.Value))
+                min = rule.ConfidenceThreshold;
+        }
+        return min;
+    }
+
     /// <summary>Maximum duration of one recorded segment. Longer tracks produce multiple consecutive clips.</summary>
     public int MaxSegmentSeconds { get; set; } = 60;
 
@@ -86,4 +115,22 @@ public sealed class RecordingConfig
 
     /// <summary>A track is considered "left the frame" after not being matched for this long.</summary>
     public double LostTrackTimeoutSeconds { get; set; } = 2.0;
+}
+
+/// <summary>One enabled capture rule from the API, with its optional time-of-day window.</summary>
+public sealed class RecordingRule
+{
+    public required HashSet<string> Classes { get; init; }
+    public required float ConfidenceThreshold { get; init; }
+    public TimeOnly? ActiveFrom { get; init; }
+    public TimeOnly? ActiveTo { get; init; }
+
+    public bool IsActiveAt(TimeOnly time)
+    {
+        if (ActiveFrom is not { } from || ActiveTo is not { } to)
+            return true;
+        return from < to
+            ? time >= from && time < to
+            : time >= from || time < to; // window crosses midnight
+    }
 }
