@@ -8,6 +8,7 @@ namespace CameraVision.Infrastructure.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<Camera> Cameras => Set<Camera>();
     public DbSet<CaptureRule> CaptureRules => Set<CaptureRule>();
     public DbSet<Capture> Captures => Set<Capture>();
@@ -29,10 +30,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             v => v.Aggregate(0, (hash, s) => HashCode.Combine(hash, s.GetHashCode())),
             v => v.ToList());
 
+        modelBuilder.Entity<Tenant>(e =>
+        {
+            e.Property(t => t.Name).HasMaxLength(100).IsRequired();
+            e.HasIndex(t => t.Name).IsUnique();
+        });
+
         modelBuilder.Entity<Camera>(e =>
         {
             e.Property(c => c.Name).HasMaxLength(100).IsRequired();
             e.HasIndex(c => c.Name).IsUnique();
+            e.HasIndex(c => c.TenantId);
+            e.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(c => c.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
             e.Property(c => c.StreamUrl).HasMaxLength(500).IsRequired();
             e.Property(c => c.SubStreamUrl).HasMaxLength(500);
             e.Property(c => c.PreferredStream).HasMaxLength(10).IsRequired();
@@ -46,6 +58,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.Classes)
                 .HasConversion(stringListConverter)
                 .Metadata.SetValueComparer(stringListComparer);
+            e.HasIndex(r => r.TenantId);
+            e.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(r => r.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Capture>(e =>
@@ -59,19 +76,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(c => c.StartedAt);
             e.HasIndex(c => c.CameraName);
             e.HasIndex(c => c.ObjectClass);
+            e.HasIndex(c => c.TenantId);
             e.HasOne<Camera>()
                 .WithMany()
                 .HasForeignKey(c => c.CameraId)
                 .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(c => c.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<AlertSettings>(e =>
         {
             e.Property(s => s.Channel).HasConversion<string>().HasMaxLength(20);
-            e.HasIndex(s => s.Channel).IsUnique();
+            e.HasIndex(s => new { s.TenantId, s.Channel }).IsUnique();
             e.Property(s => s.Recipients)
                 .HasConversion(stringListConverter)
                 .Metadata.SetValueComparer(stringListComparer);
+            e.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(s => s.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<SystemSettings>(e =>
@@ -97,10 +123,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(h => h.Detail).HasMaxLength(200);
             e.HasIndex(h => new { h.CameraId, h.OccurredAt });
             e.HasIndex(h => h.OccurredAt);
+            e.HasIndex(h => h.TenantId);
             e.HasOne<Camera>()
                 .WithMany()
                 .HasForeignKey(h => h.CameraId)
                 .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(h => h.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<AppUser>(e =>
@@ -109,6 +140,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(u => u.Username).IsUnique();
             e.Property(u => u.DisplayName).HasMaxLength(100);
             e.Property(u => u.PasswordHash).IsRequired();
+            e.Property(u => u.Role).HasConversion<string>().HasMaxLength(20);
+            e.HasIndex(u => u.TenantId);
+            e.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(u => u.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

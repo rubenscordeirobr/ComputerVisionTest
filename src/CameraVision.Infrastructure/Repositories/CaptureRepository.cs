@@ -13,6 +13,8 @@ public class CaptureRepository(IDbContextFactory<AppDbContext> factory) : ICaptu
         await using var db = await factory.CreateDbContextAsync(ct);
         var query = db.Captures.AsNoTracking();
 
+        if (filter.TenantId is { } tenantId)
+            query = query.Where(c => c.TenantId == tenantId);
         if (filter.DateFrom is { } from)
             query = query.Where(c => c.StartedAt >= from);
         if (filter.DateTo is { } to)
@@ -80,26 +82,32 @@ public class CaptureRepository(IDbContextFactory<AppDbContext> factory) : ICaptu
         return await db.Captures.Where(c => paths.Contains(c.FilePath)).ExecuteDeleteAsync(ct);
     }
 
-    public async Task<IReadOnlyList<string>> GetDistinctCameraNamesAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> GetDistinctCameraNamesAsync(int? tenantId = null, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.Captures.AsNoTracking()
-            .Select(c => c.CameraName).Distinct().OrderBy(n => n).ToListAsync(ct);
+        var query = db.Captures.AsNoTracking();
+        if (tenantId is { } tid)
+            query = query.Where(c => c.TenantId == tid);
+        return await query.Select(c => c.CameraName).Distinct().OrderBy(n => n).ToListAsync(ct);
     }
 
-    public async Task<IReadOnlyList<string>> GetDistinctClassesAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> GetDistinctClassesAsync(int? tenantId = null, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.Captures.AsNoTracking()
-            .Select(c => c.ObjectClass).Distinct().OrderBy(n => n).ToListAsync(ct);
+        var query = db.Captures.AsNoTracking();
+        if (tenantId is { } tid)
+            query = query.Where(c => c.TenantId == tid);
+        return await query.Select(c => c.ObjectClass).Distinct().OrderBy(n => n).ToListAsync(ct);
     }
 
-    public async Task<int> CountAsync(DateTime? startedAtOrAfter = null, CancellationToken ct = default)
+    public async Task<int> CountAsync(DateTime? startedAtOrAfter = null, int? tenantId = null, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
         var query = db.Captures.AsNoTracking();
         if (startedAtOrAfter is { } from)
             query = query.Where(c => c.StartedAt >= from);
+        if (tenantId is { } tid)
+            query = query.Where(c => c.TenantId == tid);
         return await query.CountAsync(ct);
     }
 

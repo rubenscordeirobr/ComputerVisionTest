@@ -16,6 +16,7 @@ public static class ServiceCollectionExtensions
         services.AddDbContextFactory<AppDbContext>(options =>
             options.UseSqlite($"Data Source={databasePath};Default Timeout=10"));
 
+        services.AddSingleton<ITenantRepository, TenantRepository>();
         services.AddSingleton<ICameraRepository, CameraRepository>();
         services.AddSingleton<ICaptureRepository, CaptureRepository>();
         services.AddSingleton<ICaptureRuleRepository, CaptureRuleRepository>();

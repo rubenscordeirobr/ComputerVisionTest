@@ -7,10 +7,13 @@ namespace CameraVision.Infrastructure.Repositories;
 
 public class UserRepository(IDbContextFactory<AppDbContext> factory) : IUserRepository
 {
-    public async Task<IReadOnlyList<AppUser>> GetAllAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<AppUser>> GetAllAsync(int? tenantId = null, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.Users.AsNoTracking().OrderBy(u => u.Username).ToListAsync(ct);
+        var query = db.Users.AsNoTracking();
+        if (tenantId is { } tid)
+            query = query.Where(u => u.TenantId == tid);
+        return await query.OrderBy(u => u.Username).ToListAsync(ct);
     }
 
     public async Task<AppUser?> GetByIdAsync(int id, CancellationToken ct = default)

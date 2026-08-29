@@ -20,6 +20,7 @@ public sealed partial class CaptureIndexer(
     StoragePaths storage,
     ICaptureRepository captures,
     ICameraRepository cameras,
+    ITenantRepository tenants,
     ILogger<CaptureIndexer> logger) : ICaptureIndexer
 {
     // e.g. "person_15-50-49_to_15-50-52.mp4", "person_14-00-20_to_14-01-33_full.mp4",
@@ -57,6 +58,14 @@ public sealed partial class CaptureIndexer(
         var pending = new List<Capture>();
         var cameraCache = new Dictionary<string, Camera?>(StringComparer.OrdinalIgnoreCase);
 
+        // Auto-created cameras and orphan captures fall back to the default tenant.
+        var defaultTenantId = (await tenants.GetDefaultAsync(ct))?.Id;
+        if (defaultTenantId == null)
+        {
+            logger.LogWarning("Capture scan skipped: no tenant exists yet.");
+            return new IndexResult([], 0);
+        }
+
         foreach (var dateDir in Directory.EnumerateDirectories(storage.OutputRoot))
         {
             var dateName = Path.GetFileName(dateDir);
@@ -71,7 +80,7 @@ public sealed partial class CaptureIndexer(
                 {
                     ct.ThrowIfCancellationRequested();
                     var capture = await TryBuildCaptureAsync(file, date, dateName, cameraName,
-                        known, onDisk, cameraCache, ct);
+                        known, onDisk, cameraCache, defaultTenantId.Value, ct);
                     if (capture == null)
                         continue;
 
@@ -96,7 +105,7 @@ public sealed partial class CaptureIndexer(
     private async Task<Capture?> TryBuildCaptureAsync(
         string file, DateOnly date, string dateName, string cameraName,
         HashSet<string> known, HashSet<string> onDisk,
-        Dictionary<string, Camera?> cameraCache, CancellationToken ct)
+        Dictionary<string, Camera?> cameraCache, int defaultTenantId, CancellationToken ct)
     {
         var fileName = Path.GetFileName(file);
         if (fileName.StartsWith(".recording_", StringComparison.OrdinalIgnoreCase))
@@ -124,10 +133,11 @@ public sealed partial class CaptureIndexer(
         if (endedAt < startedAt)
             endedAt = endedAt.AddDays(1); // crossed midnight
 
-        var camera = await GetOrCreateCameraAsync(cameraName, cameraCache, ct);
+        var camera = await GetOrCreateCameraAsync(cameraName, cameraCache, defaultTenantId, ct);
 
         return new Capture
         {
+            TenantId = camera?.TenantId ?? defaultTenantId,
             CameraId = camera?.Id,
             CameraName = cameraName,
             ObjectClass = match.Groups["class"].Value,
@@ -158,7 +168,7 @@ public sealed partial class CaptureIndexer(
             DateTimeStyles.None, out time);
 
     private async Task<Camera?> GetOrCreateCameraAsync(
-        string name, Dictionary<string, Camera?> cache, CancellationToken ct)
+        string name, Dictionary<string, Camera?> cache, int defaultTenantId, CancellationToken ct)
     {
         if (cache.TryGetValue(name, out var cached))
             return cached;
@@ -168,7 +178,7 @@ public sealed partial class CaptureIndexer(
         {
             try
             {
-                camera = new Camera { Name = name, StreamUrl = "", Enabled = false };
+                camera = new Camera { TenantId = defaultTenantId, Name = name, StreamUrl = "", Enabled = false };
                 await cameras.AddAsync(camera, ct);
                 logger.LogInformation(
                     "Auto-created camera '{Name}' from the output folder (no stream URL, disabled).", name);

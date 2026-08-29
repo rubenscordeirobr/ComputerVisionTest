@@ -7,10 +7,13 @@ namespace CameraVision.Infrastructure.Repositories;
 
 public class CameraRepository(IDbContextFactory<AppDbContext> factory) : ICameraRepository
 {
-    public async Task<IReadOnlyList<Camera>> GetAllAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<Camera>> GetAllAsync(int? tenantId = null, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.Cameras.AsNoTracking().OrderBy(c => c.Name).ToListAsync(ct);
+        var query = db.Cameras.AsNoTracking();
+        if (tenantId is { } tid)
+            query = query.Where(c => c.TenantId == tid);
+        return await query.OrderBy(c => c.Name).ToListAsync(ct);
     }
 
     public async Task<Camera?> GetByIdAsync(int id, CancellationToken ct = default)

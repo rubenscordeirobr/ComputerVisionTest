@@ -7,16 +7,22 @@ namespace CameraVision.Infrastructure.Repositories;
 
 public class CaptureRuleRepository(IDbContextFactory<AppDbContext> factory) : ICaptureRuleRepository
 {
-    public async Task<IReadOnlyList<CaptureRule>> GetAllAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<CaptureRule>> GetAllAsync(int? tenantId = null, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.CaptureRules.AsNoTracking().OrderBy(r => r.Name).ToListAsync(ct);
+        var query = db.CaptureRules.AsNoTracking();
+        if (tenantId is { } tid)
+            query = query.Where(r => r.TenantId == tid);
+        return await query.OrderBy(r => r.Name).ToListAsync(ct);
     }
 
-    public async Task<IReadOnlyList<CaptureRule>> GetEnabledAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<CaptureRule>> GetEnabledAsync(int? tenantId = null, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.CaptureRules.AsNoTracking().Where(r => r.Enabled).ToListAsync(ct);
+        var query = db.CaptureRules.AsNoTracking().Where(r => r.Enabled);
+        if (tenantId is { } tid)
+            query = query.Where(r => r.TenantId == tid);
+        return await query.ToListAsync(ct);
     }
 
     public async Task<CaptureRule?> GetByIdAsync(int id, CancellationToken ct = default)

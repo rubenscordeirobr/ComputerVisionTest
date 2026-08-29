@@ -15,11 +15,16 @@ public static class LegacyCameraImporter
     private static readonly JsonSerializerOptions _json = new() { PropertyNameCaseInsensitive = true };
 
     public static async Task ImportIfEmptyAsync(
-        ICameraRepository cameras, string camerasJsonPath, ILogger logger, CancellationToken ct = default)
+        ICameraRepository cameras, ITenantRepository tenants, string camerasJsonPath,
+        ILogger logger, CancellationToken ct = default)
     {
         try
         {
             if (await cameras.AnyAsync(ct) || !File.Exists(camerasJsonPath))
+                return;
+
+            var defaultTenantId = (await tenants.GetDefaultAsync(ct))?.Id;
+            if (defaultTenantId == null)
                 return;
 
             var entries = await ReadEntriesAsync(camerasJsonPath, ct);
@@ -31,6 +36,7 @@ public static class LegacyCameraImporter
                     continue;
                 await cameras.AddAsync(new Camera
                 {
+                    TenantId = defaultTenantId.Value,
                     Name = entry.Name.Trim(),
                     StreamUrl = entry.RtspUrl?.Trim() ?? "",
                     SubStreamUrl = string.IsNullOrWhiteSpace(entry.SubRtspUrl) ? null : entry.SubRtspUrl.Trim(),
@@ -64,7 +70,7 @@ public static class LegacyCameraImporter
             var entries = await ReadEntriesAsync(camerasJsonPath, ct);
 
             var enriched = 0;
-            foreach (var camera in await cameras.GetAllAsync(ct))
+            foreach (var camera in await cameras.GetAllAsync(ct: ct))
             {
                 if (camera.SubStreamUrl != null)
                     continue;

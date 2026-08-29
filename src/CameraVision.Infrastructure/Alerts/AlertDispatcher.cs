@@ -50,10 +50,6 @@ public sealed class AlertDispatcher(
         if (recent.Count == 0)
             return;
 
-        var rules = await ruleRepository.GetEnabledAsync(ct);
-        if (rules.Count == 0)
-            return;
-
         var system = await settingsRepository.GetSystemSettingsAsync(ct);
         // The settings page wins when filled in; otherwise the deployment's
         // CaptureLinks:PublicBaseUrl from appsettings.json is used.
@@ -66,13 +62,29 @@ public sealed class AlertDispatcher(
             logger.LogWarning("Public base URL not configured — alert links default to {Url}.", baseUrl);
         }
 
-        var channelSettings = new Dictionary<AlertChannel, AlertSettings>();
-        foreach (var channel in channels)
-            channelSettings[channel.Channel] = await settingsRepository.GetAlertSettingsAsync(channel.Channel, ct);
-
         var grouping = await settingsRepository.GetCaptureAlertSettingsAsync(ct);
 
-        foreach (var capture in recent)
+        // Rules and recipients are tenant-scoped: a capture only matches its own
+        // tenant's rules and only notifies that tenant's recipients (SPEC-14).
+        foreach (var tenantCaptures in recent.GroupBy(c => c.TenantId))
+        {
+            await DispatchTenantAsync(tenantCaptures.Key, [.. tenantCaptures],
+                grouping, system, baseUrl, ct);
+        }
+    }
+
+    private async Task DispatchTenantAsync(int tenantId, IReadOnlyList<Capture> tenantCaptures,
+        CaptureAlertSettings grouping, SystemSettings system, string baseUrl, CancellationToken ct)
+    {
+        var rules = await ruleRepository.GetEnabledAsync(tenantId, ct);
+        if (rules.Count == 0)
+            return;
+
+        var channelSettings = new Dictionary<AlertChannel, AlertSettings>();
+        foreach (var channel in channels)
+            channelSettings[channel.Channel] = await settingsRepository.GetAlertSettingsAsync(tenantId, channel.Channel, ct);
+
+        foreach (var capture in tenantCaptures)
         {
             var matching = rules
                 .Where(r => r.Classes.Contains(capture.ObjectClass, StringComparer.OrdinalIgnoreCase) &&

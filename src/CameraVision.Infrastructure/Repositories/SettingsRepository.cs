@@ -7,17 +7,19 @@ namespace CameraVision.Infrastructure.Repositories;
 
 public class SettingsRepository(IDbContextFactory<AppDbContext> factory) : ISettingsRepository
 {
-    public async Task<AlertSettings> GetAlertSettingsAsync(AlertChannel channel, CancellationToken ct = default)
+    public async Task<AlertSettings> GetAlertSettingsAsync(int tenantId, AlertChannel channel, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.AlertSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Channel == channel, ct)
-               ?? new AlertSettings { Channel = channel };
+        return await db.AlertSettings.AsNoTracking()
+                   .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.Channel == channel, ct)
+               ?? new AlertSettings { TenantId = tenantId, Channel = channel };
     }
 
     public async Task SaveAlertSettingsAsync(AlertSettings settings, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        var existing = await db.AlertSettings.FirstOrDefaultAsync(s => s.Channel == settings.Channel, ct);
+        var existing = await db.AlertSettings.FirstOrDefaultAsync(
+            s => s.TenantId == settings.TenantId && s.Channel == settings.Channel, ct);
         if (existing == null)
         {
             db.Add(settings);
