@@ -1,6 +1,7 @@
 @page "/capture-settings"
 @using CameraVision.Web.Components.Dialogs
 @inject ICaptureRuleRepository RuleRepo
+@inject ITenantRepository TenantRepo
 @inject ISettingsRepository SettingsRepo
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -26,6 +27,10 @@
     <MudTable Items="_rules" Hover="true" Loading="_loading" LoadingProgressColor="Color.Primary">
         <HeaderContent>
             <MudTh>Nome</MudTh>
+            @if (_isSuperAdmin)
+            {
+                <MudTh>Empresa</MudTh>
+            }
             <MudTh>Classes</MudTh>
             <MudTh>Confiança</MudTh>
             <MudTh>Segmento</MudTh>
@@ -37,6 +42,10 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Nome">@context.Name</MudTd>
+            @if (_isSuperAdmin)
+            {
+                <MudTd DataLabel="Empresa">@TenantNameOf(context.TenantId)</MudTd>
+            }
             <MudTd DataLabel="Classes">
                 @foreach (var className in context.Classes)
                 {
@@ -95,6 +104,8 @@
     </MudTable>
 </MudPaper>
 
+@if (_isSuperAdmin)
+{
 <MudPaper Class="pa-6 mt-4" Style="max-width: 1000px;">
     <MudText Typo="Typo.h6" Class="mb-2">Antiflood de alertas</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
@@ -115,17 +126,37 @@
         </MudButton>
     </div>
 </MudPaper>
+}
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
     private IReadOnlyList<CaptureRule> _rules = [];
+    private IReadOnlyList<Tenant> _tenants = [];
+    private Dictionary<int, string> _tenantNames = [];
     private CaptureAlertSettings _alertSettings = new();
     private bool _loading = true;
+    private bool _isSuperAdmin;
+    private int? _tenantFilter;
+    private int? _ownTenantId;
 
     protected override async Task OnInitializedAsync()
     {
-        _alertSettings = await SettingsRepo.GetCaptureAlertSettingsAsync();
+        var auth = await AuthState;
+        _isSuperAdmin = auth.User.IsSuperAdmin();
+        _tenantFilter = auth.User.GetTenantFilter();
+        _ownTenantId = auth.User.GetTenantId();
+        if (_isSuperAdmin)
+        {
+            _tenants = await TenantRepo.GetAllAsync();
+            _tenantNames = _tenants.ToDictionary(t => t.Id, t => t.Name);
+            _alertSettings = await SettingsRepo.GetCaptureAlertSettingsAsync();
+        }
         await LoadAsync();
     }
+
+    private string TenantNameOf(int tenantId) => _tenantNames.GetValueOrDefault(tenantId, "—");
 
     private async Task SaveAlertSettingsAsync()
     {
@@ -136,7 +167,7 @@
     private async Task LoadAsync()
     {
         _loading = true;
-        _rules = await RuleRepo.GetAllAsync();
+        _rules = await RuleRepo.GetAllAsync(_tenantFilter);
         _loading = false;
     }
 
@@ -148,7 +179,16 @@
 
     private async Task AddRuleAsync()
     {
-        var parameters = new DialogParameters<CaptureRuleDialog> { { d => d.Rule, new CaptureRule() } };
+        var rule = new CaptureRule
+        {
+            TenantId = _isSuperAdmin ? _tenants.FirstOrDefault()?.Id ?? 0 : _ownTenantId ?? 0,
+        };
+        var parameters = new DialogParameters<CaptureRuleDialog>
+        {
+            { d => d.Rule, rule },
+            { d => d.ShowTenantSelect, _isSuperAdmin },
+            { d => d.Tenants, _tenants },
+        };
         var dialog = await DialogService.ShowAsync<CaptureRuleDialog>("Nova regra", parameters, DialogOpts);
         if ((await dialog.Result) is { Canceled: false })
             await LoadAsync();
@@ -159,6 +199,7 @@
         var copy = new CaptureRule
         {
             Id = rule.Id,
+            TenantId = rule.TenantId,
             Name = rule.Name,
             Enabled = rule.Enabled,
             Classes = [.. rule.Classes],
@@ -167,9 +208,16 @@
             LingerSeconds = rule.LingerSeconds,
             NotifyEmail = rule.NotifyEmail,
             NotifyWhatsApp = rule.NotifyWhatsApp,
+            ActiveFrom = rule.ActiveFrom,
+            ActiveTo = rule.ActiveTo,
             CreatedAt = rule.CreatedAt,
         };
-        var parameters = new DialogParameters<CaptureRuleDialog> { { d => d.Rule, copy } };
+        var parameters = new DialogParameters<CaptureRuleDialog>
+        {
+            { d => d.Rule, copy },
+            { d => d.ShowTenantSelect, _isSuperAdmin },
+            { d => d.Tenants, _tenants },
+        };
         var dialog = await DialogService.ShowAsync<CaptureRuleDialog>("Editar regra", parameters, DialogOpts);
         if ((await dialog.Result) is { Canceled: false })
             await LoadAsync();

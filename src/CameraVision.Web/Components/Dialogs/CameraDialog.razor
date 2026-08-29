@@ -4,6 +4,16 @@
 <MudDialog>
     <DialogContent>
         <MudForm @ref="_form">
+            @if (ShowTenantSelect)
+            {
+                <MudSelect T="int" @bind-Value="Camera.TenantId" Label="Empresa" Class="mb-3"
+                           AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var tenant in Tenants)
+                    {
+                        <MudSelectItem T="int" Value="@tenant.Id">@tenant.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
             <MudTextField T="string" @bind-Value="Camera.Name" Label="Nome" MaxLength="100"
                           Required="true" RequiredError="Informe o nome."
                           Validation="@(new Func<string, Task<string?>>(ValidateNameAsync))" />
@@ -37,6 +47,13 @@
     [Parameter]
     public Camera Camera { get; set; } = new();
 
+    /// <summary>SuperAdmin editors pick the owning tenant explicitly.</summary>
+    [Parameter]
+    public bool ShowTenantSelect { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<Tenant> Tenants { get; set; } = [];
+
     private MudForm _form = default!;
 
     private async Task SaveAsync()
@@ -44,6 +61,12 @@
         await _form.ValidateAsync();
         if (!_form.IsValid)
             return;
+
+        if (Camera.TenantId == 0)
+        {
+            Snackbar.Add("Selecione a empresa da câmera.", Severity.Warning);
+            return;
+        }
 
         Camera.Name = Camera.Name.Trim();
         Camera.StreamUrl = Camera.StreamUrl.Trim();

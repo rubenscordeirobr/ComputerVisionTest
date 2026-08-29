@@ -69,27 +69,32 @@ public sealed class CaptureAlertDigestHostedService(
         if (baseUrl.Length == 0)
             baseUrl = "http://localhost:5210";
 
-        foreach (var channel in channels)
+        // One summary per tenant per channel — recipients are tenant-scoped (SPEC-14).
+        foreach (var tenantCaptures in pending.GroupBy(c => c.TenantId))
         {
-            var items = pending
-                .Where(c => (c.AlertChannels ?? "").Contains(channel.Channel.ToString(), StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            if (items.Count == 0)
-                continue;
-
-            var alertSettings = await settingsRepository.GetAlertSettingsAsync(channel.Channel, ct);
-            if (!alertSettings.Enabled || alertSettings.Recipients.Count == 0)
-                continue;
-
-            try
+            foreach (var channel in channels)
             {
-                if (await channel.TrySendAsync(ComposeDigest(items, baseUrl), alertSettings, system, ct))
-                    logger.LogInformation("Grouped capture alert sent via {Channel} with {Count} capture(s).",
-                        channel.Channel, items.Count);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogError(ex, "Grouped capture alert via {Channel} failed.", channel.Channel);
+                var items = tenantCaptures
+                    .Where(c => (c.AlertChannels ?? "").Contains(channel.Channel.ToString(), StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (items.Count == 0)
+                    continue;
+
+                var alertSettings = await settingsRepository.GetAlertSettingsAsync(
+                    tenantCaptures.Key, channel.Channel, ct);
+                if (!alertSettings.Enabled || alertSettings.Recipients.Count == 0)
+                    continue;
+
+                try
+                {
+                    if (await channel.TrySendAsync(ComposeDigest(items, baseUrl), alertSettings, system, ct))
+                        logger.LogInformation("Grouped capture alert sent via {Channel} with {Count} capture(s).",
+                            channel.Channel, items.Count);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Grouped capture alert via {Channel} failed.", channel.Channel);
+                }
             }
         }
 

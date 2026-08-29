@@ -61,7 +61,8 @@ public sealed class CameraHealthMonitor(
 
     private async Task CheckAllAsync(CancellationToken ct)
     {
-        var list = await cameras.GetAllAsync(ct);
+        // All tenants — health monitoring is a system-level concern.
+        var list = await cameras.GetAllAsync(ct: ct);
         var results = await Task.WhenAll(list.Select(c => CheckAsync(c, ct)));
 
         var knownIds = list.Select(c => c.Id).ToHashSet();

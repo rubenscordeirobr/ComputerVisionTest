@@ -58,6 +58,9 @@
 </MudGrid>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
     private int _camerasTotal;
     private int _camerasEnabled;
     private int _capturesTotal;
@@ -65,10 +68,13 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var cameras = await CameraRepo.GetAllAsync();
+        var auth = await AuthState;
+        var tenantFilter = auth.User.GetTenantFilter();
+
+        var cameras = await CameraRepo.GetAllAsync(tenantFilter);
         _camerasTotal = cameras.Count;
         _camerasEnabled = cameras.Count(c => c.Enabled);
-        _capturesTotal = await CaptureRepo.CountAsync();
-        _capturesToday = await CaptureRepo.CountAsync(DateTime.Today);
+        _capturesTotal = await CaptureRepo.CountAsync(tenantId: tenantFilter);
+        _capturesToday = await CaptureRepo.CountAsync(DateTime.Today, tenantFilter);
     }
 }

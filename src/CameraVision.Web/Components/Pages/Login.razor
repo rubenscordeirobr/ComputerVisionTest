@@ -7,6 +7,7 @@
 @using Microsoft.AspNetCore.Authentication.Cookies
 @using Microsoft.AspNetCore.Identity
 @inject IUserRepository UserRepo
+@inject ITenantRepository TenantRepo
 @inject IPasswordHasher<AppUser> PasswordHasher
 @inject NavigationManager Navigation
 
@@ -73,13 +74,26 @@
             return;
         }
 
+        // Tenant users are locked out while their tenant is deactivated.
+        if (user.TenantId is { } tenantId)
+        {
+            var tenant = await TenantRepo.GetByIdAsync(tenantId);
+            if (tenant is not { IsActive: true })
+            {
+                _error = "Empresa desativada. Fale com o administrador do sistema.";
+                return;
+            }
+        }
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Name, user.Username),
-            new("display_name", user.DisplayName ?? user.Username),
-            new("is_admin", user.IsAdmin ? "true" : "false"),
+            new(AppClaims.DisplayName, user.DisplayName ?? user.Username),
+            new(AppClaims.Role, user.Role.ToString()),
         };
+        if (user.TenantId is { } claimTenantId)
+            claims.Add(new(AppClaims.TenantId, claimTenantId.ToString()));
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,

@@ -1,4 +1,5 @@
 @using Microsoft.AspNetCore.Identity
+@using CameraVision.Web.Services
 @inject IUserRepository UserRepo
 @inject IPasswordHasher<AppUser> PasswordHasher
 @inject ISnackbar Snackbar
@@ -22,10 +23,36 @@
                               RequiredError="Confirme a senha."
                               Validation="@(new Func<string, string?>(ValidatePasswordConfirm))" />
             }
-            <MudSwitch T="bool" @bind-Value="User.IsAdmin" Label="Administrador"
-                       Color="Color.Primary" Class="mt-3" />
+            <MudSelect T="UserRole" @bind-Value="User.Role" Label="Perfil" Class="mt-3"
+                       AnchorOrigin="Origin.BottomCenter">
+                <MudSelectItem T="UserRole" Value="UserRole.User">@RoleUi.Label(UserRole.User)</MudSelectItem>
+                <MudSelectItem T="UserRole" Value="UserRole.Admin">@RoleUi.Label(UserRole.Admin)</MudSelectItem>
+                @if (EditorIsSuperAdmin)
+                {
+                    <MudSelectItem T="UserRole" Value="UserRole.SuperAdmin">@RoleUi.Label(UserRole.SuperAdmin)</MudSelectItem>
+                }
+            </MudSelect>
+            @if (EditorIsSuperAdmin)
+            {
+                @if (User.Role == UserRole.SuperAdmin)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                        Superadmins não pertencem a nenhuma empresa.
+                    </MudText>
+                }
+                else
+                {
+                    <MudSelect T="int?" @bind-Value="User.TenantId" Label="Empresa" Class="mt-3"
+                               AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var tenant in Tenants)
+                        {
+                            <MudSelectItem T="int?" Value="@((int?)tenant.Id)">@tenant.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+            }
             <MudSwitch T="bool" @bind-Value="User.IsActive" Label="Ativo"
-                       Color="Color.Success" Class="mt-1" />
+                       Color="Color.Success" Class="mt-3" />
         </MudForm>
     </DialogContent>
     <DialogActions>
@@ -47,6 +74,16 @@
     [Parameter]
     public int CurrentUserId { get; set; }
 
+    /// <summary>SuperAdmin editors pick tenant + any role; tenant admins stay inside their tenant.</summary>
+    [Parameter]
+    public bool EditorIsSuperAdmin { get; set; }
+
+    [Parameter]
+    public int? EditorTenantId { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<Tenant> Tenants { get; set; } = [];
+
     private MudForm _form = default!;
     private string _password = "";
     private string _passwordConfirm = "";
@@ -57,11 +94,24 @@
         if (!_form.IsValid)
             return;
 
+        // Tenant assignment: superadmins have none; everyone else needs one. A
+        // tenant admin can only ever create/edit users of their own tenant.
+        if (User.Role == UserRole.SuperAdmin)
+            User.TenantId = null;
+        else if (!EditorIsSuperAdmin)
+            User.TenantId = EditorTenantId;
+        if (User.Role != UserRole.SuperAdmin && User.TenantId == null)
+        {
+            Snackbar.Add("Selecione a empresa do usuário.", Severity.Warning);
+            return;
+        }
+
         if (!IsNew && User.Id == CurrentUserId)
         {
-            if (!User.IsAdmin)
+            var requiredRole = EditorIsSuperAdmin ? UserRole.SuperAdmin : UserRole.Admin;
+            if (User.Role != requiredRole)
             {
-                Snackbar.Add("Você não pode remover seu próprio acesso de administrador.", Severity.Warning);
+                Snackbar.Add("Você não pode alterar seu próprio perfil.", Severity.Warning);
                 return;
             }
             if (!User.IsActive)

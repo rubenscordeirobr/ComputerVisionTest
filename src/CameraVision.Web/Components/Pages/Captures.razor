@@ -113,6 +113,9 @@
 </MudPaper>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
     private MudTable<Capture> _table = default!;
     private DateRange? _dateRange;
     private string? _cameraFilter;
@@ -121,19 +124,26 @@
     private IReadOnlyList<string> _cameraNames = [];
     private IReadOnlyList<string> _classNames = [];
     private bool _scanning;
+    private int? _tenantFilter;
 
-    protected override async Task OnInitializedAsync() => await LoadFilterOptionsAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState;
+        _tenantFilter = auth.User.GetTenantFilter();
+        await LoadFilterOptionsAsync();
+    }
 
     private async Task LoadFilterOptionsAsync()
     {
-        _cameraNames = await CaptureRepo.GetDistinctCameraNamesAsync();
-        _classNames = await CaptureRepo.GetDistinctClassesAsync();
+        _cameraNames = await CaptureRepo.GetDistinctCameraNamesAsync(_tenantFilter);
+        _classNames = await CaptureRepo.GetDistinctClassesAsync(_tenantFilter);
     }
 
     private async Task<TableData<Capture>> LoadServerDataAsync(TableState state, CancellationToken ct)
     {
         var filter = new CaptureFilter
         {
+            TenantId = _tenantFilter,
             DateFrom = _dateRange?.Start?.Date,
             DateTo = _dateRange?.End?.Date.AddDays(1),
             CameraName = _cameraFilter,

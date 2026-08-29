@@ -134,6 +134,7 @@ public sealed class CameraHealthAlertService(
         var now = DateTime.Now;
         var healthEvent = new CameraHealthEvent
         {
+            TenantId = camera.TenantId,
             CameraId = camera.Id,
             CameraName = camera.Name,
             Condition = condition,
@@ -172,8 +173,9 @@ public sealed class CameraHealthAlertService(
                 }
                 else
                 {
-                    // 3. Send individually now.
-                    await notifier.SendAsync(ComposeMessage(camera.Name, condition, detail, now), settings, ct);
+                    // 3. Send individually now — to the camera's tenant recipients.
+                    await notifier.SendAsync(ComposeMessage(camera.Name, condition, detail, now),
+                        settings, camera.TenantId, ct);
                     healthEvent.NotifiedAt = now;
                     logger.LogInformation("Health alert sent: {Camera} {Condition}.", camera.Name, condition);
                 }

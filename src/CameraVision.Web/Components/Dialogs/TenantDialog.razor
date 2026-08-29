@@ -1,0 +1,69 @@
+@inject ITenantRepository TenantRepo
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField T="string" @bind-Value="Tenant.Name" Label="Nome" MaxLength="100"
+                          Required="true" RequiredError="Informe o nome da empresa."
+                          Validation="@(new Func<string, Task<string?>>(ValidateNameAsync))" />
+            <MudSwitch T="bool" @bind-Value="Tenant.IsActive" Label="Ativa"
+                       Color="Color.Success" Class="mt-3" />
+            @if (!Tenant.IsActive)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                    Os usuários desta empresa não conseguirão entrar enquanto ela
+                    estiver desativada.
+                </MudAlert>
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Tenant Tenant { get; set; } = new();
+
+    [Parameter]
+    public bool IsNew { get; set; }
+
+    private MudForm _form = default!;
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        Tenant.Name = Tenant.Name.Trim();
+
+        if (IsNew)
+        {
+            await TenantRepo.AddAsync(Tenant);
+            Snackbar.Add("Empresa criada.", Severity.Success);
+        }
+        else
+        {
+            await TenantRepo.UpdateAsync(Tenant);
+            Snackbar.Add("Empresa atualizada.", Severity.Success);
+        }
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task<string?> ValidateNameAsync(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+        var exists = await TenantRepo.NameExistsAsync(name.Trim(), IsNew ? null : Tenant.Id);
+        return exists ? "Já existe uma empresa com esse nome." : null;
+    }
+}

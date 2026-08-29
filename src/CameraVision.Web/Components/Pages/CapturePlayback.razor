@@ -53,6 +53,9 @@ else
 }
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
     [Parameter]
     public int Id { get; set; }
 
@@ -63,6 +66,14 @@ else
     {
         _loading = true;
         _capture = await CaptureRepo.GetByIdAsync(Id);
+
+        // Other tenants' footage reads as "not found" (SuperAdmin sees everything).
+        var auth = await AuthState;
+        if (_capture != null && !auth.User.IsSuperAdmin() &&
+            _capture.TenantId != auth.User.GetTenantId())
+        {
+            _capture = null;
+        }
         _loading = false;
     }
 }

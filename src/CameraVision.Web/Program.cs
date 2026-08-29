@@ -1,6 +1,7 @@
 using System.Globalization;
 using CameraVision.Core;
 using CameraVision.Core.Alerts;
+using CameraVision.Core.Auth;
 using CameraVision.Core.Entities;
 using CameraVision.Core.Health;
 using CameraVision.Core.Repositories;
@@ -94,7 +95,13 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.Name = "CameraVision.Auth";
     });
 builder.Services.AddAuthorization(options =>
-    options.AddPolicy("Admin", policy => policy.RequireClaim("is_admin", "true")));
+{
+    // Admin = manages a tenant; SuperAdmin passes every Admin gate too (SPEC-14).
+    options.AddPolicy("Admin", policy => policy.RequireClaim(
+        AppClaims.Role, nameof(UserRole.Admin), nameof(UserRole.SuperAdmin)));
+    options.AddPolicy("SuperAdmin", policy => policy.RequireClaim(
+        AppClaims.Role, nameof(UserRole.SuperAdmin)));
+});
 builder.Services.AddCascadingAuthenticationState();
 
 var app = builder.Build();
@@ -108,7 +115,8 @@ await DbInitializer.InitializeAsync(
 var legacyCamerasFile = Path.GetFullPath(Path.Combine(contentRoot,
     builder.Configuration["Storage:LegacyCamerasFile"] ?? "../../data/cameras.json"));
 await LegacyCameraImporter.ImportIfEmptyAsync(
-    app.Services.GetRequiredService<ICameraRepository>(), legacyCamerasFile, app.Logger);
+    app.Services.GetRequiredService<ICameraRepository>(),
+    app.Services.GetRequiredService<ITenantRepository>(), legacyCamerasFile, app.Logger);
 await LegacyCameraImporter.EnrichFromLegacyAsync(
     app.Services.GetRequiredService<ICameraRepository>(), legacyCamerasFile, app.Logger);
 

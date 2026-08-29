@@ -1,0 +1,101 @@
+@page "/tenants"
+@attribute [Authorize(Policy = "SuperAdmin")]
+@using CameraVision.Web.Components.Dialogs
+@inject ITenantRepository TenantRepo
+@inject IDialogService DialogService
+
+<PageTitle>Empresas — CameraVision</PageTitle>
+
+<div class="d-flex align-center mb-4">
+    <MudText Typo="Typo.h4">Empresas</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.AddBusiness" OnClick="AddTenantAsync">
+        Nova empresa
+    </MudButton>
+</div>
+
+<MudAlert Severity="Severity.Info" Class="mb-4" Style="max-width: 1000px;">
+    Cada empresa tem suas próprias câmeras, regras, capturas, destinatários de alerta
+    e usuários. Desativar uma empresa bloqueia o acesso dos usuários dela sem apagar
+    os dados.
+</MudAlert>
+
+<MudPaper>
+    <MudTable Items="_tenants" Hover="true" Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh>Nome</MudTh>
+            <MudTh>Usuários</MudTh>
+            <MudTh>Câmeras</MudTh>
+            <MudTh>Ativa</MudTh>
+            <MudTh>Criada em</MudTh>
+            <MudTh Style="text-align:right">Ações</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Nome">@context.Tenant.Name</MudTd>
+            <MudTd DataLabel="Usuários">@context.UserCount</MudTd>
+            <MudTd DataLabel="Câmeras">@context.CameraCount</MudTd>
+            <MudTd DataLabel="Ativa">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Color="@(context.Tenant.IsActive ? Color.Success : Color.Default)">
+                    @(context.Tenant.IsActive ? "Ativa" : "Desativada")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Criada em">@context.Tenant.CreatedAt.ToString("dd/MM/yyyy HH:mm")</MudTd>
+            <MudTd Style="text-align:right; white-space: nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                               OnClick="@(() => EditTenantAsync(context.Tenant))" aria-label="Editar" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary">Nenhuma empresa cadastrada.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private IReadOnlyList<TenantSummary> _tenants = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _tenants = await TenantRepo.GetSummariesAsync();
+        _loading = false;
+    }
+
+    private async Task AddTenantAsync()
+    {
+        var parameters = new DialogParameters<TenantDialog>
+        {
+            { d => d.Tenant, new Tenant() },
+            { d => d.IsNew, true },
+        };
+        var dialog = await DialogService.ShowAsync<TenantDialog>("Nova empresa", parameters, DialogOpts);
+        if ((await dialog.Result) is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task EditTenantAsync(Tenant tenant)
+    {
+        var copy = new Tenant
+        {
+            Id = tenant.Id,
+            Name = tenant.Name,
+            IsActive = tenant.IsActive,
+            CreatedAt = tenant.CreatedAt,
+        };
+        var parameters = new DialogParameters<TenantDialog>
+        {
+            { d => d.Tenant, copy },
+            { d => d.IsNew, false },
+        };
+        var dialog = await DialogService.ShowAsync<TenantDialog>("Editar empresa", parameters, DialogOpts);
+        if ((await dialog.Result) is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private static readonly DialogOptions DialogOpts = new() { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
+}

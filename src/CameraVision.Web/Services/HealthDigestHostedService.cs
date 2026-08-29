@@ -57,24 +57,29 @@ public sealed class HealthDigestHostedService(
         if (pending.Count == 0)
             return;
 
-        var parts = pending.Select(e =>
-            $"{e.CameraName} {CameraHealthAlertService.ConditionLabelPtBr(e.Condition)} {e.OccurredAt:HH:mm}");
-        var summary = $"Resumo: {pending.Count} evento(s) — {string.Join("; ", parts)}.";
+        // One digest per tenant — recipients are tenant-scoped (SPEC-14).
+        foreach (var tenantEvents in pending.GroupBy(e => e.TenantId))
+        {
+            var items = tenantEvents.ToList();
+            var parts = items.Select(e =>
+                $"{e.CameraName} {CameraHealthAlertService.ConditionLabelPtBr(e.Condition)} {e.OccurredAt:HH:mm}");
+            var summary = $"Resumo: {items.Count} evento(s) — {string.Join("; ", parts)}.";
 
-        var htmlItems = string.Join("", pending.Select(e =>
-            $"<li><b>{WebUtility.HtmlEncode(e.CameraName)}</b> " +
-            $"{CameraHealthAlertService.ConditionLabelPtBr(e.Condition)} às {e.OccurredAt:HH:mm}" +
-            (e.Detail == null ? "" : $" ({WebUtility.HtmlEncode(e.Detail)})") + "</li>"));
-        var html =
-            "<div style=\"font-family:Roboto,Arial,sans-serif;max-width:520px\">" +
-            "<h2 style=\"color:#594ae2;margin:0 0 12px\">Resumo de saúde das câmeras</h2>" +
-            $"<ul style=\"margin:0 0 16px;padding-left:20px\">{htmlItems}</ul>" +
-            "<p style=\"color:#888;font-size:12px\">CameraVision — resumo automático, não responda.</p>" +
-            "</div>";
+            var htmlItems = string.Join("", items.Select(e =>
+                $"<li><b>{WebUtility.HtmlEncode(e.CameraName)}</b> " +
+                $"{CameraHealthAlertService.ConditionLabelPtBr(e.Condition)} às {e.OccurredAt:HH:mm}" +
+                (e.Detail == null ? "" : $" ({WebUtility.HtmlEncode(e.Detail)})") + "</li>"));
+            var html =
+                "<div style=\"font-family:Roboto,Arial,sans-serif;max-width:520px\">" +
+                "<h2 style=\"color:#594ae2;margin:0 0 12px\">Resumo de saúde das câmeras</h2>" +
+                $"<ul style=\"margin:0 0 16px;padding-left:20px\">{htmlItems}</ul>" +
+                "<p style=\"color:#888;font-size:12px\">CameraVision — resumo automático, não responda.</p>" +
+                "</div>";
 
-        var message = new AlertMessage(
-            $"Resumo de saúde das câmeras — {pending.Count} evento(s)", html, summary);
-        await notifier.SendAsync(message, settings, ct);
+            var message = new AlertMessage(
+                $"Resumo de saúde das câmeras — {items.Count} evento(s)", html, summary);
+            await notifier.SendAsync(message, settings, tenantEvents.Key, ct);
+        }
 
         await events.MarkDigestedAsync(pending.Select(e => e.Id), now, ct);
         settings.LastDigestAt = now;

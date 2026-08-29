@@ -57,12 +57,22 @@ else
     [Parameter, EditorRequired]
     public AlertChannel Channel { get; set; }
 
+    /// <summary>Recipients belong to a tenant (the SuperAdmin picks one on the page).</summary>
+    [Parameter, EditorRequired]
+    public int TenantId { get; set; }
+
     private AlertSettings _settings = new();
     private string _newRecipient = "";
     private string? _recipientError;
+    private int _loadedTenantId = -1;
 
-    protected override async Task OnInitializedAsync() =>
-        _settings = await SettingsRepo.GetAlertSettingsAsync(Channel);
+    protected override async Task OnParametersSetAsync()
+    {
+        if (TenantId == _loadedTenantId)
+            return;
+        _loadedTenantId = TenantId;
+        _settings = await SettingsRepo.GetAlertSettingsAsync(TenantId, Channel);
+    }
 
     private string RecipientLabel => Channel == AlertChannel.Email
         ? "E-mail do destinatário"

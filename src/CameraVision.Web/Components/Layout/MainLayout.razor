@@ -33,9 +33,12 @@
             <MudNavLink Href="/captures" Icon="@Icons.Material.Filled.VideoLibrary">Capturas</MudNavLink>
             <MudNavLink Href="/capture-settings" Icon="@Icons.Material.Filled.Tune">Regras de Captura</MudNavLink>
             <MudNavLink Href="/alerts" Icon="@Icons.Material.Filled.NotificationsActive">Alertas</MudNavLink>
-            <MudNavLink Href="/system-settings" Icon="@Icons.Material.Filled.Settings">Sistema</MudNavLink>
             <AuthorizeView Policy="Admin">
                 <MudNavLink Href="/users" Icon="@Icons.Material.Filled.People">Usuários</MudNavLink>
+            </AuthorizeView>
+            <AuthorizeView Policy="SuperAdmin">
+                <MudNavLink Href="/tenants" Icon="@Icons.Material.Filled.Business">Empresas</MudNavLink>
+                <MudNavLink Href="/system-settings" Icon="@Icons.Material.Filled.Settings">Sistema</MudNavLink>
             </AuthorizeView>
         </MudNavMenu>
     </MudDrawer>

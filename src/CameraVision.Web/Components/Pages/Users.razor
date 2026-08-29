@@ -1,8 +1,9 @@
 @page "/users"
 @attribute [Authorize(Policy = "Admin")]
-@using System.Security.Claims
 @using CameraVision.Web.Components.Dialogs
+@using CameraVision.Web.Services
 @inject IUserRepository UserRepo
+@inject ITenantRepository TenantRepo
 @inject IDialogService DialogService
 
 <PageTitle>Usuários — CameraVision</PageTitle>
@@ -21,7 +22,11 @@
         <HeaderContent>
             <MudTh>Usuário</MudTh>
             <MudTh>Nome</MudTh>
-            <MudTh>Administrador</MudTh>
+            @if (_isSuperAdmin)
+            {
+                <MudTh>Empresa</MudTh>
+            }
+            <MudTh>Perfil</MudTh>
             <MudTh>Ativo</MudTh>
             <MudTh>Criado em</MudTh>
             <MudTh Style="text-align:right">Ações</MudTh>
@@ -29,14 +34,21 @@
         <RowTemplate>
             <MudTd DataLabel="Usuário">@context.Username</MudTd>
             <MudTd DataLabel="Nome">@(context.DisplayName ?? "—")</MudTd>
-            <MudTd DataLabel="Administrador">
-                @if (context.IsAdmin)
+            @if (_isSuperAdmin)
+            {
+                <MudTd DataLabel="Empresa">@TenantNameOf(context)</MudTd>
+            }
+            <MudTd DataLabel="Perfil">
+                @if (context.Role == UserRole.User)
                 {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">Sim</MudChip>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@RoleUi.Label(context.Role)</MudText>
                 }
                 else
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Não</MudText>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                             Color="@(context.Role == UserRole.SuperAdmin ? Color.Warning : Color.Primary)">
+                        @RoleUi.Label(context.Role)
+                    </MudChip>
                 }
             </MudTd>
             <MudTd DataLabel="Ativo">
@@ -61,30 +73,50 @@
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private IReadOnlyList<AppUser> _users = [];
+    private IReadOnlyList<Tenant> _tenants = [];
+    private Dictionary<int, string> _tenantNames = [];
     private bool _loading = true;
+    private bool _isSuperAdmin;
+    private int? _tenantFilter;
+    private int? _editorTenantId;
     private int _currentUserId;
 
     protected override async Task OnInitializedAsync()
     {
         var auth = await AuthState;
-        _ = int.TryParse(auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out _currentUserId);
+        _currentUserId = auth.User.GetUserId();
+        _isSuperAdmin = auth.User.IsSuperAdmin();
+        _tenantFilter = auth.User.GetTenantFilter();
+        _editorTenantId = auth.User.GetTenantId();
+
+        if (_isSuperAdmin)
+        {
+            _tenants = await TenantRepo.GetAllAsync();
+            _tenantNames = _tenants.ToDictionary(t => t.Id, t => t.Name);
+        }
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
         _loading = true;
-        _users = await UserRepo.GetAllAsync();
+        _users = await UserRepo.GetAllAsync(_tenantFilter);
         _loading = false;
     }
+
+    private string TenantNameOf(AppUser user) =>
+        user.TenantId is { } tenantId ? _tenantNames.GetValueOrDefault(tenantId, "—") : "—";
 
     private async Task AddUserAsync()
     {
         var parameters = new DialogParameters<UserDialog>
         {
-            { d => d.User, new AppUser() },
+            { d => d.User, new AppUser { TenantId = _editorTenantId } },
             { d => d.IsNew, true },
             { d => d.CurrentUserId, _currentUserId },
+            { d => d.EditorIsSuperAdmin, _isSuperAdmin },
+            { d => d.EditorTenantId, _editorTenantId },
+            { d => d.Tenants, _tenants },
         };
         var dialog = await DialogService.ShowAsync<UserDialog>("Novo usuário", parameters, DialogOpts);
         if ((await dialog.Result) is { Canceled: false })
@@ -96,10 +128,11 @@
         var copy = new AppUser
         {
             Id = user.Id,
+            TenantId = user.TenantId,
             Username = user.Username,
             DisplayName = user.DisplayName,
             PasswordHash = user.PasswordHash,
-            IsAdmin = user.IsAdmin,
+            Role = user.Role,
             IsActive = user.IsActive,
             CreatedAt = user.CreatedAt,
         };
@@ -108,6 +141,9 @@
             { d => d.User, copy },
             { d => d.IsNew, false },
             { d => d.CurrentUserId, _currentUserId },
+            { d => d.EditorIsSuperAdmin, _isSuperAdmin },
+            { d => d.EditorTenantId, _editorTenantId },
+            { d => d.Tenants, _tenants },
         };
         var dialog = await DialogService.ShowAsync<UserDialog>("Editar usuário", parameters, DialogOpts);
         if ((await dialog.Result) is { Canceled: false })

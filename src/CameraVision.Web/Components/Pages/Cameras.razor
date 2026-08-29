@@ -3,6 +3,7 @@
 @using CameraVision.Web.Components.Dialogs
 @implements IDisposable
 @inject ICameraRepository CameraRepo
+@inject ITenantRepository TenantRepo
 @inject ICameraHealthService Health
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -22,6 +23,10 @@
     <MudTable Items="_cameras" Hover="true" Loading="_loading" LoadingProgressColor="Color.Primary">
         <HeaderContent>
             <MudTh>Nome</MudTh>
+            @if (_isSuperAdmin)
+            {
+                <MudTh>Empresa</MudTh>
+            }
             <MudTh>Stream</MudTh>
             <MudTh>IP</MudTh>
             <MudTh>Ativa</MudTh>
@@ -32,6 +37,10 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Nome">@context.Name</MudTd>
+            @if (_isSuperAdmin)
+            {
+                <MudTd DataLabel="Empresa">@TenantNameOf(context.TenantId)</MudTd>
+            }
             <MudTd DataLabel="Stream">
                 @if (string.IsNullOrWhiteSpace(context.StreamUrl))
                 {
@@ -81,11 +90,29 @@
 </MudPaper>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
     private IReadOnlyList<Camera> _cameras = [];
+    private IReadOnlyList<Tenant> _tenants = [];
+    private Dictionary<int, string> _tenantNames = [];
     private bool _loading = true;
+    private bool _isSuperAdmin;
+    private int? _tenantFilter;
+    private int? _ownTenantId;
 
     protected override async Task OnInitializedAsync()
     {
+        var auth = await AuthState;
+        _isSuperAdmin = auth.User.IsSuperAdmin();
+        _tenantFilter = auth.User.GetTenantFilter();
+        _ownTenantId = auth.User.GetTenantId();
+        if (_isSuperAdmin)
+        {
+            _tenants = await TenantRepo.GetAllAsync();
+            _tenantNames = _tenants.ToDictionary(t => t.Id, t => t.Name);
+        }
+
         Health.Changed += OnHealthChanged;
         await LoadAsync();
     }
@@ -97,9 +124,11 @@
     private async Task LoadAsync()
     {
         _loading = true;
-        _cameras = await CameraRepo.GetAllAsync();
+        _cameras = await CameraRepo.GetAllAsync(_tenantFilter);
         _loading = false;
     }
+
+    private string TenantNameOf(int tenantId) => _tenantNames.GetValueOrDefault(tenantId, "—");
 
     private (string Label, Color Color) StatusFor(Camera camera)
     {
@@ -150,7 +179,16 @@
 
     private async Task AddCameraAsync()
     {
-        var parameters = new DialogParameters<CameraDialog> { { d => d.Camera, new Camera() } };
+        var camera = new Camera
+        {
+            TenantId = _isSuperAdmin ? _tenants.FirstOrDefault()?.Id ?? 0 : _ownTenantId ?? 0,
+        };
+        var parameters = new DialogParameters<CameraDialog>
+        {
+            { d => d.Camera, camera },
+            { d => d.ShowTenantSelect, _isSuperAdmin },
+            { d => d.Tenants, _tenants },
+        };
         var dialog = await DialogService.ShowAsync<CameraDialog>("Nova câmera", parameters, DialogOpts);
         if ((await dialog.Result) is { Canceled: false })
             await LoadAsync();
@@ -161,13 +199,23 @@
         var copy = new Camera
         {
             Id = camera.Id,
+            TenantId = camera.TenantId,
             Name = camera.Name,
             StreamUrl = camera.StreamUrl,
+            SubStreamUrl = camera.SubStreamUrl,
+            PreferredStream = camera.PreferredStream,
             IpAddress = camera.IpAddress,
             Enabled = camera.Enabled,
             CreatedAt = camera.CreatedAt,
+            ProcessorStatus = camera.ProcessorStatus,
+            ProcessorStatusAt = camera.ProcessorStatusAt,
         };
-        var parameters = new DialogParameters<CameraDialog> { { d => d.Camera, copy } };
+        var parameters = new DialogParameters<CameraDialog>
+        {
+            { d => d.Camera, copy },
+            { d => d.ShowTenantSelect, _isSuperAdmin },
+            { d => d.Tenants, _tenants },
+        };
         var dialog = await DialogService.ShowAsync<CameraDialog>("Editar câmera", parameters, DialogOpts);
         if ((await dialog.Result) is { Canceled: false })
             await LoadAsync();

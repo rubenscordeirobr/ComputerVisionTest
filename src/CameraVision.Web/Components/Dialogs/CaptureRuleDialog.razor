@@ -4,6 +4,16 @@
 <MudDialog>
     <DialogContent>
         <MudForm @ref="_form">
+            @if (ShowTenantSelect)
+            {
+                <MudSelect T="int" @bind-Value="Rule.TenantId" Label="Empresa" Class="mb-3"
+                           AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var tenant in Tenants)
+                    {
+                        <MudSelectItem T="int" Value="@tenant.Id">@tenant.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
             <MudTextField T="string" @bind-Value="Rule.Name" Label="Nome" MaxLength="100"
                           Required="true" RequiredError="Informe o nome da regra." />
 
@@ -70,6 +80,13 @@
     [Parameter]
     public CaptureRule Rule { get; set; } = new();
 
+    /// <summary>SuperAdmin editors pick the owning tenant explicitly.</summary>
+    [Parameter]
+    public bool ShowTenantSelect { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<Tenant> Tenants { get; set; } = [];
+
     private MudForm _form = default!;
     private IReadOnlyCollection<string> _selectedClasses = [];
     private bool _hasWindow;
@@ -92,6 +109,11 @@
         await _form.ValidateAsync();
         if (!_form.IsValid)
             return;
+        if (Rule.TenantId == 0)
+        {
+            Snackbar.Add("Selecione a empresa da regra.", Severity.Warning);
+            return;
+        }
         if (_selectedClasses.Count == 0)
         {
             Snackbar.Add("Selecione ao menos uma classe.", Severity.Warning);

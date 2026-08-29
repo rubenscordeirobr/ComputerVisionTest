@@ -1,20 +1,68 @@
 @page "/alerts"
 @using CameraVision.Web.Components.Shared
+@inject ITenantRepository TenantRepo
 
 <PageTitle>Alertas — CameraVision</PageTitle>
 
 <MudText Typo="Typo.h4" Class="mb-4">Alertas</MudText>
 
-<MudPaper Style="max-width: 900px;">
-    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-6">
-        <MudTabPanel Text="E-mail" Icon="@Icons.Material.Filled.Email">
-            <AlertChannelForm Channel="AlertChannel.Email" />
-        </MudTabPanel>
-        <MudTabPanel Text="WhatsApp" Icon="@Icons.Material.Filled.Sms">
-            <AlertChannelForm Channel="AlertChannel.WhatsApp" />
-        </MudTabPanel>
-        <MudTabPanel Text="Saúde das câmeras" Icon="@Icons.Material.Filled.MonitorHeart">
-            <HealthAlertSettingsForm />
-        </MudTabPanel>
-    </MudTabs>
-</MudPaper>
+@if (_isSuperAdmin)
+{
+    <MudSelect T="int?" @bind-Value="_selectedTenantId" Label="Empresa" Class="mb-4"
+               Style="max-width: 360px;" AnchorOrigin="Origin.BottomCenter"
+               HelperText="Os destinatários de cada canal pertencem à empresa selecionada.">
+        @foreach (var tenant in _tenants)
+        {
+            <MudSelectItem T="int?" Value="@((int?)tenant.Id)">@tenant.Name</MudSelectItem>
+        }
+    </MudSelect>
+}
+
+@if (_ready)
+{
+    <MudPaper Style="max-width: 900px;">
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-6">
+            @if (ChannelTenantId is { } channelTenantId)
+            {
+                <MudTabPanel Text="E-mail" Icon="@Icons.Material.Filled.Email">
+                    <AlertChannelForm Channel="AlertChannel.Email" TenantId="channelTenantId" />
+                </MudTabPanel>
+                <MudTabPanel Text="WhatsApp" Icon="@Icons.Material.Filled.Sms">
+                    <AlertChannelForm Channel="AlertChannel.WhatsApp" TenantId="channelTenantId" />
+                </MudTabPanel>
+            }
+            @if (_isSuperAdmin)
+            {
+                <MudTabPanel Text="Saúde das câmeras" Icon="@Icons.Material.Filled.MonitorHeart">
+                    <HealthAlertSettingsForm />
+                </MudTabPanel>
+            }
+        </MudTabs>
+    </MudPaper>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private bool _ready;
+    private bool _isSuperAdmin;
+    private int? _ownTenantId;
+    private int? _selectedTenantId;
+    private IReadOnlyList<Tenant> _tenants = [];
+
+    private int? ChannelTenantId => _isSuperAdmin ? _selectedTenantId : _ownTenantId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState;
+        _isSuperAdmin = auth.User.IsSuperAdmin();
+        _ownTenantId = auth.User.GetTenantId();
+        if (_isSuperAdmin)
+        {
+            _tenants = await TenantRepo.GetAllAsync();
+            _selectedTenantId = _tenants.FirstOrDefault()?.Id;
+        }
+        _ready = true;
+    }
+}
