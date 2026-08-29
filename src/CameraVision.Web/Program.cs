@@ -12,9 +12,9 @@ using CameraVision.Web.Services;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
 using MudBlazor.Services;
 
 // User-facing formatting (dates, numbers) is PT-BR.
@@ -35,6 +35,20 @@ var storage = new StoragePaths(
 builder.Services.AddSingleton(storage);
 builder.Services.AddCameraVisionData(storage.DatabasePath);
 
+// Media (videos/thumbnails) is streamed by the API application (SPEC-11).
+var mediaBaseUrl = (builder.Configuration["Api:MediaBaseUrl"] ?? "http://localhost:5220").TrimEnd('/');
+builder.Services.AddSingleton(new MediaUrls(mediaBaseUrl));
+
+// Public (tokenized) capture links used in alert e-mails — the host names live in
+// appsettings.json (CaptureLinks), the secret must match the API's.
+builder.Services.AddSingleton(new CaptureLinkOptions
+{
+    PublicBaseUrl = builder.Configuration["CaptureLinks:PublicBaseUrl"] ?? "",
+    MediaBaseUrl = builder.Configuration["CaptureLinks:MediaBaseUrl"] ?? mediaBaseUrl,
+    Secret = builder.Configuration["CaptureLinks:Secret"] ?? "",
+});
+builder.Services.AddSingleton<CaptureLinkService>();
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
@@ -42,6 +56,11 @@ builder.Services.AddMudServices();
 builder.Services.AddSingleton<CameraHealthMonitor>();
 builder.Services.AddSingleton<ICameraHealthService>(sp => sp.GetRequiredService<CameraHealthMonitor>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<CameraHealthMonitor>());
+
+builder.Services.AddSingleton<HealthAlertNotifier>();
+builder.Services.AddSingleton<CameraHealthAlertService>();
+builder.Services.AddSingleton<ICameraHealthCycleListener>(sp => sp.GetRequiredService<CameraHealthAlertService>());
+builder.Services.AddHostedService<HealthDigestHostedService>();
 
 builder.Services.AddSingleton<ICaptureIndexer, CaptureIndexer>();
 builder.Services.AddHostedService<CaptureIndexHostedService>();
@@ -52,9 +71,18 @@ builder.Services.AddSingleton<IEvolutionApiClient, EvolutionApiClient>();
 builder.Services.AddSingleton<IAlertChannel, EmailAlertChannel>();
 builder.Services.AddSingleton<IAlertChannel, WhatsAppAlertChannel>();
 builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
+builder.Services.AddHostedService<CaptureAlertDigestHostedService>();
 
 // Authentication: cookie scheme + PasswordHasher over the custom AppUser table
 // (full ASP.NET Core Identity is overkill for one LAN admin — see SPEC-08).
+// The Data Protection key ring is shared with CameraVision.Api so the same
+// cookie authenticates /media streaming there (SPEC-11).
+var keysDirectory = Path.GetFullPath(Path.Combine(contentRoot,
+    builder.Configuration["Storage:KeysDirectory"] ?? "../../data/keys"));
+Directory.CreateDirectory(keysDirectory);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory))
+    .SetApplicationName("CameraVision");
 builder.Services.AddSingleton<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -81,6 +109,8 @@ var legacyCamerasFile = Path.GetFullPath(Path.Combine(contentRoot,
     builder.Configuration["Storage:LegacyCamerasFile"] ?? "../../data/cameras.json"));
 await LegacyCameraImporter.ImportIfEmptyAsync(
     app.Services.GetRequiredService<ICameraRepository>(), legacyCamerasFile, app.Logger);
+await LegacyCameraImporter.EnrichFromLegacyAsync(
+    app.Services.GetRequiredService<ICameraRepository>(), legacyCamerasFile, app.Logger);
 
 if (!app.Environment.IsDevelopment())
 {
@@ -92,24 +122,6 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
-
-// Recorded videos and thumbnails are sensitive footage — require a signed-in user.
-app.Use(async (context, next) =>
-{
-    if (context.Request.Path.StartsWithSegments("/media") &&
-        context.User.Identity?.IsAuthenticated != true)
-    {
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        await context.Response.WriteAsync("Não autorizado.");
-        return;
-    }
-    await next();
-});
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(storage.OutputRoot),
-    RequestPath = "/media",
-});
 
 app.UseAntiforgery();
 

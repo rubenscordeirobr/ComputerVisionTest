@@ -10,6 +10,15 @@
             <MudTextField T="string" @bind-Value="Camera.StreamUrl" Label="URL do stream (RTSP)" MaxLength="500"
                           Required="true" RequiredError="Informe a URL do stream."
                           Validation="@(new Func<string, string?>(ValidateUrl))" Class="mt-3" />
+            <MudTextField T="string" @bind-Value="Camera.SubStreamUrl" Label="URL do substream (opcional)"
+                          MaxLength="500" Validation="@(new Func<string, string?>(ValidateOptionalUrl))"
+                          Class="mt-3" />
+            <MudSelect T="string" @bind-Value="Camera.PreferredStream" Label="Stream preferido"
+                       AnchorOrigin="Origin.BottomCenter" Class="mt-3"
+                       HelperText="Qual stream o processador de detecção consome.">
+                <MudSelectItem T="string" Value="@("main")">Principal</MudSelectItem>
+                <MudSelectItem T="string" Value="@("sub")">Substream</MudSelectItem>
+            </MudSelect>
             <MudTextField T="string" @bind-Value="Camera.IpAddress" Label="Endereço IP (opcional)" MaxLength="64"
                           Validation="@(new Func<string, string?>(ValidateIp))" Class="mt-3" />
             <MudSwitch T="bool" @bind-Value="Camera.Enabled" Label="Ativa" Color="Color.Success" Class="mt-3" />
@@ -38,6 +47,7 @@
 
         Camera.Name = Camera.Name.Trim();
         Camera.StreamUrl = Camera.StreamUrl.Trim();
+        Camera.SubStreamUrl = string.IsNullOrWhiteSpace(Camera.SubStreamUrl) ? null : Camera.SubStreamUrl.Trim();
         Camera.IpAddress = string.IsNullOrWhiteSpace(Camera.IpAddress) ? null : Camera.IpAddress.Trim();
 
         if (Camera.Id == 0)
@@ -71,6 +81,13 @@
             uri.Scheme is not ("rtsp" or "http" or "https"))
             return "URL inválida. Use rtsp://, http:// ou https://.";
         return null;
+    }
+
+    private string? ValidateOptionalUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+        return ValidateUrl(url);
     }
 
     private string? ValidateIp(string ip)

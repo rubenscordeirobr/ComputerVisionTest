@@ -1,0 +1,18 @@
+@inherits LayoutComponentBase
+
+@* Layout for pages opened from an alert link: no navigation, no account menu. *@
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIcon Icon="@Icons.Material.Filled.Videocam" Class="ml-1 mr-2" />
+        <MudText Typo="Typo.h6">CameraVision</MudText>
+    </MudAppBar>
+    <MudMainContent Class="mt-16 pa-4">
+        @Body
+    </MudMainContent>
+</MudLayout>

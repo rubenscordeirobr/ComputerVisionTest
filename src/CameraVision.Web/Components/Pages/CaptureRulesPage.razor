@@ -1,0 +1,193 @@
+@page "/capture-settings"
+@using CameraVision.Web.Components.Dialogs
+@inject ICaptureRuleRepository RuleRepo
+@inject ISettingsRepository SettingsRepo
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Regras de Captura — CameraVision</PageTitle>
+
+<div class="d-flex align-center mb-4">
+    <MudText Typo="Typo.h4">Regras de Captura</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="AddRuleAsync">
+        Nova regra
+    </MudButton>
+</div>
+
+<MudAlert Severity="Severity.Info" Class="mb-4" Style="max-width: 1000px;">
+    Cada regra define quais objetos são gravados e quais canais recebem alerta —
+    por exemplo, "gato → e-mail" e "pessoa → WhatsApp". O processador de detecção
+    aplica a união das regras ativas.
+</MudAlert>
+
+<MudPaper>
+    <MudTable Items="_rules" Hover="true" Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh>Nome</MudTh>
+            <MudTh>Classes</MudTh>
+            <MudTh>Confiança</MudTh>
+            <MudTh>Segmento</MudTh>
+            <MudTh>Espera</MudTh>
+            <MudTh>Horário</MudTh>
+            <MudTh>Alertas</MudTh>
+            <MudTh>Ativa</MudTh>
+            <MudTh Style="text-align:right">Ações</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Nome">@context.Name</MudTd>
+            <MudTd DataLabel="Classes">
+                @foreach (var className in context.Classes)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">
+                        @DetectableClasses.Translate(className)
+                    </MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Confiança">@context.ConfidenceThreshold.ToString("P0")</MudTd>
+            <MudTd DataLabel="Segmento">@($"{context.MaxSegmentSeconds} s")</MudTd>
+            <MudTd DataLabel="Espera">@($"{context.LingerSeconds:0.#} s")</MudTd>
+            <MudTd DataLabel="Horário">
+                @if (context.IsAlwaysActive)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Sempre</MudText>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">
+                        @($"{context.ActiveFrom:HH\\:mm}–{context.ActiveTo:HH\\:mm}")
+                    </MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Alertas">
+                @if (context.NotifyEmail)
+                {
+                    <MudTooltip Text="Envia e-mail">
+                        <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" Color="Color.Primary" />
+                    </MudTooltip>
+                }
+                @if (context.NotifyWhatsApp)
+                {
+                    <MudTooltip Text="Envia WhatsApp (futuro)">
+                        <MudIcon Icon="@Icons.Material.Filled.Sms" Size="Size.Small" Color="Color.Success" />
+                    </MudTooltip>
+                }
+                @if (!context.NotifyEmail && !context.NotifyWhatsApp)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Ativa">
+                <MudSwitch T="bool" Value="context.Enabled" Color="Color.Success"
+                           ValueChanged="@((bool value) => ToggleEnabledAsync(context, value))" />
+            </MudTd>
+            <MudTd Style="text-align:right; white-space: nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                               OnClick="@(() => EditRuleAsync(context))" aria-label="Editar" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteRuleAsync(context))" aria-label="Excluir" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary">Nenhuma regra cadastrada.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
+<MudPaper Class="pa-6 mt-4" Style="max-width: 1000px;">
+    <MudText Typo="Typo.h6" Class="mb-2">Antiflood de alertas</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Com o agrupamento ativado, os alertas de captura são enviados como um único
+        resumo por período (o primeiro aviso após um período calmo ainda sai em até
+        30 segundos; os demais entram no próximo resumo).
+    </MudText>
+    <div class="d-flex align-center flex-wrap gap-4">
+        <MudSwitch T="bool" @bind-Value="_alertSettings.GroupingEnabled"
+                   Label="Agrupar alertas de captura" Color="Color.Primary" />
+        <MudNumericField T="int" @bind-Value="_alertSettings.GroupWindowMinutes"
+                         Label="Intervalo do resumo (min)" Min="1" Max="120"
+                         Disabled="@(!_alertSettings.GroupingEnabled)"
+                         Style="max-width: 200px;" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAlertSettingsAsync">
+            Salvar
+        </MudButton>
+    </div>
+</MudPaper>
+
+@code {
+    private IReadOnlyList<CaptureRule> _rules = [];
+    private CaptureAlertSettings _alertSettings = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _alertSettings = await SettingsRepo.GetCaptureAlertSettingsAsync();
+        await LoadAsync();
+    }
+
+    private async Task SaveAlertSettingsAsync()
+    {
+        await SettingsRepo.SaveCaptureAlertSettingsAsync(_alertSettings);
+        Snackbar.Add("Configurações de antiflood salvas.", Severity.Success);
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _rules = await RuleRepo.GetAllAsync();
+        _loading = false;
+    }
+
+    private async Task ToggleEnabledAsync(CaptureRule rule, bool enabled)
+    {
+        rule.Enabled = enabled;
+        await RuleRepo.UpdateAsync(rule);
+    }
+
+    private async Task AddRuleAsync()
+    {
+        var parameters = new DialogParameters<CaptureRuleDialog> { { d => d.Rule, new CaptureRule() } };
+        var dialog = await DialogService.ShowAsync<CaptureRuleDialog>("Nova regra", parameters, DialogOpts);
+        if ((await dialog.Result) is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task EditRuleAsync(CaptureRule rule)
+    {
+        var copy = new CaptureRule
+        {
+            Id = rule.Id,
+            Name = rule.Name,
+            Enabled = rule.Enabled,
+            Classes = [.. rule.Classes],
+            ConfidenceThreshold = rule.ConfidenceThreshold,
+            MaxSegmentSeconds = rule.MaxSegmentSeconds,
+            LingerSeconds = rule.LingerSeconds,
+            NotifyEmail = rule.NotifyEmail,
+            NotifyWhatsApp = rule.NotifyWhatsApp,
+            CreatedAt = rule.CreatedAt,
+        };
+        var parameters = new DialogParameters<CaptureRuleDialog> { { d => d.Rule, copy } };
+        var dialog = await DialogService.ShowAsync<CaptureRuleDialog>("Editar regra", parameters, DialogOpts);
+        if ((await dialog.Result) is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task DeleteRuleAsync(CaptureRule rule)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Excluir regra",
+            $"Excluir a regra \"{rule.Name}\"? Objetos dela deixam de ser gravados/alertados.",
+            yesText: "Excluir", cancelText: "Cancelar");
+        if (confirmed == true)
+        {
+            await RuleRepo.DeleteAsync(rule.Id);
+            Snackbar.Add("Regra excluída.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private static readonly DialogOptions DialogOpts = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+}

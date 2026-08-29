@@ -1,0 +1,139 @@
+@inject ICaptureRuleRepository RuleRepo
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField T="string" @bind-Value="Rule.Name" Label="Nome" MaxLength="100"
+                          Required="true" RequiredError="Informe o nome da regra." />
+
+            <MudSelect T="string" MultiSelection="true" @bind-SelectedValues="_selectedClasses"
+                       Label="Classes monitoradas" AnchorOrigin="Origin.BottomCenter" Class="mt-3"
+                       MultiSelectionTextFunc="ClassesSummary">
+                @foreach (var name in DetectableClasses.Names)
+                {
+                    <MudSelectItem T="string" Value="@name">
+                        @DetectableClasses.Translate(name) (@name)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudNumericField T="int" @bind-Value="Rule.MaxSegmentSeconds" Class="mt-3"
+                             Label="Duração máxima do segmento (s)" Min="5" Max="3600" />
+            <MudNumericField T="double" @bind-Value="Rule.LingerSeconds" Class="mt-3"
+                             Label="Tempo de espera após o objeto sair (s)" Min="0" Max="300" Step="0.5" />
+
+            <div class="mt-4">
+                <MudText Typo="Typo.body2">
+                    Confiança mínima: <b>@(Rule.ConfidenceThreshold.ToString("P0"))</b>
+                </MudText>
+                <MudSlider T="double" @bind-Value="Rule.ConfidenceThreshold"
+                           Min="0.05" Max="0.95" Step="0.05" Color="Color.Primary" />
+            </div>
+
+            <MudSwitch T="bool" @bind-Value="_hasWindow" Label="Somente em determinado horário"
+                       Color="Color.Primary" Class="mt-3" />
+            @if (_hasWindow)
+            {
+                <MudGrid Spacing="2">
+                    <MudItem xs="6">
+                        <MudTimePicker @bind-Time="_activeFrom" Label="Início" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudTimePicker @bind-Time="_activeTo" Label="Fim" />
+                    </MudItem>
+                </MudGrid>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Fim menor que o início atravessa a meia-noite (ex.: 22:00 até 06:00).
+                </MudText>
+            }
+
+            <MudText Typo="Typo.subtitle2" Class="mt-3">Alertar por</MudText>
+            <MudSwitch T="bool" @bind-Value="Rule.NotifyEmail" Label="E-mail" Color="Color.Primary" />
+            <MudSwitch T="bool" @bind-Value="Rule.NotifyWhatsApp" Label="WhatsApp (envio em versão futura)"
+                       Color="Color.Success" />
+
+            <MudSwitch T="bool" @bind-Value="Rule.Enabled" Label="Regra ativa" Color="Color.Success"
+                       Class="mt-2" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public CaptureRule Rule { get; set; } = new();
+
+    private MudForm _form = default!;
+    private IReadOnlyCollection<string> _selectedClasses = [];
+    private bool _hasWindow;
+    private TimeSpan? _activeFrom;
+    private TimeSpan? _activeTo;
+
+    protected override void OnInitialized()
+    {
+        _selectedClasses = Rule.Classes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _hasWindow = Rule is { ActiveFrom: not null, ActiveTo: not null };
+        _activeFrom = Rule.ActiveFrom?.ToTimeSpan();
+        _activeTo = Rule.ActiveTo?.ToTimeSpan();
+    }
+
+    private string ClassesSummary(IReadOnlyList<string> selected) =>
+        selected.Count == 0 ? "" : string.Join(", ", selected.Select(DetectableClasses.Translate));
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+        if (_selectedClasses.Count == 0)
+        {
+            Snackbar.Add("Selecione ao menos uma classe.", Severity.Warning);
+            return;
+        }
+
+        if (_hasWindow)
+        {
+            if (_activeFrom == null || _activeTo == null)
+            {
+                Snackbar.Add("Informe o horário de início e de fim.", Severity.Warning);
+                return;
+            }
+            if (_activeFrom == _activeTo)
+            {
+                Snackbar.Add("Início e fim não podem ser iguais.", Severity.Warning);
+                return;
+            }
+            Rule.ActiveFrom = TimeOnly.FromTimeSpan(_activeFrom.Value);
+            Rule.ActiveTo = TimeOnly.FromTimeSpan(_activeTo.Value);
+        }
+        else
+        {
+            Rule.ActiveFrom = null;
+            Rule.ActiveTo = null;
+        }
+
+        Rule.Name = Rule.Name.Trim();
+        Rule.Classes = _selectedClasses.ToList();
+
+        if (Rule.Id == 0)
+        {
+            await RuleRepo.AddAsync(Rule);
+            Snackbar.Add("Regra criada.", Severity.Success);
+        }
+        else
+        {
+            await RuleRepo.UpdateAsync(Rule);
+            Snackbar.Add("Regra atualizada.", Severity.Success);
+        }
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

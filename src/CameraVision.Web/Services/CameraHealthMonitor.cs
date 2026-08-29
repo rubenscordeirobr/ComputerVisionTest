@@ -14,6 +14,7 @@ namespace CameraVision.Web.Services;
 /// </summary>
 public sealed class CameraHealthMonitor(
     ICameraRepository cameras,
+    IEnumerable<ICameraHealthCycleListener> cycleListeners,
     IConfiguration configuration,
     ILogger<CameraHealthMonitor> logger) : BackgroundService, ICameraHealthService
 {
@@ -71,6 +72,24 @@ public sealed class CameraHealthMonitor(
             _health[health.CameraId] = health;
 
         Changed?.Invoke();
+
+        // Feed the health-alert state machine with the full cycle results.
+        var pairs = list
+            .Select(camera => (camera, _health.GetValueOrDefault(camera.Id)))
+            .Where(pair => pair.Item2 != null)
+            .Select(pair => (pair.camera, pair.Item2!))
+            .ToList();
+        foreach (var listener in cycleListeners)
+        {
+            try
+            {
+                await listener.OnCycleAsync(pairs, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Health cycle listener failed.");
+            }
+        }
     }
 
     private static async Task<CameraHealth> CheckAsync(Camera camera, CancellationToken ct)

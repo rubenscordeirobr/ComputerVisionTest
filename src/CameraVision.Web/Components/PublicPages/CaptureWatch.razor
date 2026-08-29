@@ -1,6 +1,11 @@
-@page "/captures/{Id:int}/play"
+@page "/captures/{Id:int}/watch"
+@layout Layout.PublicLayout
+@using CameraVision.Core.Alerts
 @inject ICaptureRepository CaptureRepo
-@inject CameraVision.Web.Services.MediaUrls Media
+@inject CaptureLinkService Links
+
+@* Public playback page linked from alert e-mails: no sign-in, the ?token= query
+   parameter authorizes this single capture (and the media request that follows). *@
 
 <PageTitle>Reprodução — CameraVision</PageTitle>
 
@@ -10,17 +15,16 @@
 }
 else if (_capture == null)
 {
-    <MudAlert Severity="Severity.Warning" Style="max-width: 600px;" Class="mb-4">
-        Captura não encontrada.
+    <MudAlert Severity="Severity.Warning" Style="max-width: 600px;">
+        Link inválido — a captura não está mais disponível.
     </MudAlert>
-    <MudButton Href="/captures" StartIcon="@Icons.Material.Filled.ArrowBack">Voltar para capturas</MudButton>
 }
 else
 {
-    <MudText Typo="Typo.h4" Class="mb-4">Reprodução de captura</MudText>
+    <MudPaper Class="pa-4 mx-auto" Style="max-width: 960px;">
+        <MudText Typo="Typo.h5" Class="mb-3">Alerta de captura</MudText>
 
-    <MudPaper Class="pa-4" Style="max-width: 960px;">
-        <video controls autoplay src="@Media.For(_capture.FilePath)"
+        <video controls autoplay src="@_videoUrl"
                style="width: 100%; max-height: 70vh; background: #000;">
             Seu navegador não suporta a reprodução deste vídeo.
         </video>
@@ -45,9 +49,8 @@ else
         </MudGrid>
 
         <div class="d-flex gap-2 mt-4">
-            <MudButton Variant="Variant.Outlined" Href="@Media.For(_capture.FilePath)" Target="_blank"
+            <MudButton Variant="Variant.Outlined" Href="@_videoUrl" Target="_blank"
                        StartIcon="@Icons.Material.Filled.Download">Baixar</MudButton>
-            <MudButton Href="/captures" StartIcon="@Icons.Material.Filled.ArrowBack">Voltar para capturas</MudButton>
         </div>
     </MudPaper>
 }
@@ -56,13 +59,28 @@ else
     [Parameter]
     public int Id { get; set; }
 
+    [SupplyParameterFromQuery(Name = "token")]
+    public string? Token { get; set; }
+
     private Capture? _capture;
+    private string _videoUrl = "";
     private bool _loading = true;
 
     protected override async Task OnParametersSetAsync()
     {
         _loading = true;
-        _capture = await CaptureRepo.GetByIdAsync(Id);
+        _capture = null;
+
+        if (Links.IsValidToken(Id, Token))
+        {
+            var capture = await CaptureRepo.GetByIdAsync(Id);
+            if (capture != null)
+            {
+                _capture = capture;
+                _videoUrl = Links.MediaUrl(capture.Id, capture.FilePath);
+            }
+        }
+
         _loading = false;
     }
 }

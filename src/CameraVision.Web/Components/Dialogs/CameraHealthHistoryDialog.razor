@@ -1,0 +1,74 @@
+@using CameraVision.Web.Services
+@inject ICameraHealthEventRepository EventsRepo
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_events.Count == 0)
+        {
+            <MudText Class="mud-text-secondary">Nenhum evento de saúde registrado para esta câmera.</MudText>
+        }
+        else
+        {
+            <MudTable Items="_events" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Quando</MudTh>
+                    <MudTh>Condição</MudTh>
+                    <MudTh>Detalhe</MudTh>
+                    <MudTh>Notificação</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Quando">@context.OccurredAt.ToString("dd/MM HH:mm:ss")</MudTd>
+                    <MudTd DataLabel="Condição">
+                        @{ var (label, color) = ConditionChip(context.Condition); }
+                        <MudChip T="string" Color="@color" Size="Size.Small" Variant="Variant.Filled">@label</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Detalhe">@(context.Detail ?? "—")</MudTd>
+                    <MudTd DataLabel="Notificação">@NotificationLabel(context)</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="Close">Fechar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Camera Camera { get; set; } = new();
+
+    private IReadOnlyList<CameraHealthEvent> _events = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _events = await EventsRepo.GetRecentByCameraAsync(Camera.Id, 100);
+        _loading = false;
+    }
+
+    private static (string Label, Color Color) ConditionChip(HealthCondition condition) => condition switch
+    {
+        HealthCondition.Offline => ("Offline", Color.Error),
+        HealthCondition.Weak => ("Sinal fraco", Color.Warning),
+        HealthCondition.Recovered => ("Normalizada", Color.Success),
+        _ => (condition.ToString(), Color.Default),
+    };
+
+    private static string NotificationLabel(CameraHealthEvent healthEvent)
+    {
+        if (healthEvent.NotifiedAt is { } notified)
+            return $"Enviada {notified:HH:mm}";
+        if (healthEvent.DigestedAt is { } digested)
+            return $"Em resumo {digested:HH:mm}";
+        return healthEvent.Suppressed ? "Suprimida" : "Pendente";
+    }
+
+    private void Close() => MudDialog.Close();
+}

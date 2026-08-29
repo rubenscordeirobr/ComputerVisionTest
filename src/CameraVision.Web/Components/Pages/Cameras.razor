@@ -27,6 +27,7 @@
             <MudTh>Ativa</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>Latência</MudTh>
+            <MudTh>Processador</MudTh>
             <MudTh Style="text-align:right">Ações</MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -53,7 +54,20 @@
                 <MudChip T="string" Color="@color" Size="Size.Small" Variant="Variant.Filled">@label</MudChip>
             </MudTd>
             <MudTd DataLabel="Latência">@LatencyFor(context)</MudTd>
-            <MudTd Style="text-align:right">
+            <MudTd DataLabel="Processador">
+                @{ var (procLabel, procColor) = ProcessorFor(context); }
+                @if (procLabel == "—")
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                }
+                else
+                {
+                    <MudChip T="string" Color="@procColor" Size="Size.Small" Variant="Variant.Text">@procLabel</MudChip>
+                }
+            </MudTd>
+            <MudTd Style="text-align:right; white-space: nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.History" Size="Size.Small"
+                               OnClick="@(() => ShowHistoryAsync(context))" aria-label="Histórico de saúde" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                OnClick="@(() => EditCameraAsync(context))" aria-label="Editar" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
@@ -102,6 +116,20 @@
         };
     }
 
+    private static (string Label, Color Color) ProcessorFor(Camera camera)
+    {
+        if (camera.ProcessorStatusAt == null ||
+            DateTime.Now - camera.ProcessorStatusAt > TimeSpan.FromMinutes(2))
+            return ("—", Color.Default);
+        return camera.ProcessorStatus switch
+        {
+            "connected" => ("Conectado", Color.Success),
+            "reconnecting" => ("Reconectando", Color.Warning),
+            "stopped" => ("Parado", Color.Default),
+            _ => ("—", Color.Default),
+        };
+    }
+
     private string LatencyFor(Camera camera)
     {
         var health = Health.TryGet(camera.Id);
@@ -143,6 +171,14 @@
         var dialog = await DialogService.ShowAsync<CameraDialog>("Editar câmera", parameters, DialogOpts);
         if ((await dialog.Result) is { Canceled: false })
             await LoadAsync();
+    }
+
+    private async Task ShowHistoryAsync(Camera camera)
+    {
+        var parameters = new DialogParameters<CameraHealthHistoryDialog> { { d => d.Camera, camera } };
+        await DialogService.ShowAsync<CameraHealthHistoryDialog>(
+            $"Histórico de saúde — {camera.Name}", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true });
     }
 
     private async Task DeleteCameraAsync(Camera camera)

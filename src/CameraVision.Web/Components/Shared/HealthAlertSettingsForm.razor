@@ -1,0 +1,77 @@
+@inject ISettingsRepository SettingsRepo
+@inject ISnackbar Snackbar
+
+<MudAlert Severity="Severity.Info" Class="mb-4">
+    Avisa quando uma câmera fica <b>offline</b> ou com <b>sinal fraco</b> e quando ela
+    normaliza. Antiflood na ordem: <b>intervalo mínimo → limite global → modo resumo</b>.
+    Eventos suprimidos ficam no histórico e entram no próximo resumo.
+</MudAlert>
+
+<MudSwitch T="bool" @bind-Value="_settings.Enabled" Label="Ativado" Color="Color.Success" />
+
+<MudText Typo="Typo.subtitle2" Class="mt-3">Canais</MudText>
+<MudSwitch T="bool" @bind-Value="_settings.NotifyEmail" Label="E-mail" Color="Color.Primary" />
+<MudSwitch T="bool" @bind-Value="_settings.NotifyWhatsApp" Label="WhatsApp (envio em versão futura)"
+           Color="Color.Success" />
+
+<MudGrid Spacing="2" Class="mt-2">
+    <MudItem xs="12" sm="6">
+        <MudNumericField T="int" @bind-Value="_settings.WeakLatencyMs" Label="Limite de latência (ms)"
+                         Min="50" Max="10000"
+                         HelperText="Acima disso a câmera conta como sinal fraco." />
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudNumericField T="int" @bind-Value="_settings.ConsecutiveChecks" Label="Verificações consecutivas"
+                         Min="1" Max="20"
+                         HelperText="A condição precisa persistir por N verificações antes de alertar." />
+    </MudItem>
+</MudGrid>
+
+<MudSwitch T="bool" @bind-Value="_settings.NotifyRecovery" Label="Notificar recuperação (normalizada)"
+           Color="Color.Success" Class="mt-1" />
+
+<MudText Typo="Typo.subtitle2" Class="mt-4">Antiflood</MudText>
+<MudGrid Spacing="2">
+    <MudItem xs="12" sm="4">
+        <MudNumericField T="int" @bind-Value="_settings.CooldownMinutes"
+                         Label="Intervalo mínimo (min)" Min="0" Max="1440"
+                         HelperText="Silêncio por câmera/condição após um aviso." />
+    </MudItem>
+    <MudItem xs="6" sm="4">
+        <MudNumericField T="int" @bind-Value="_settings.FloodCapCount"
+                         Label="Máx. de notificações" Min="1" Max="1000" />
+    </MudItem>
+    <MudItem xs="6" sm="4">
+        <MudNumericField T="int" @bind-Value="_settings.FloodCapWindowMinutes"
+                         Label="por período (min)" Min="1" Max="1440" />
+    </MudItem>
+</MudGrid>
+
+<MudSwitch T="bool" @bind-Value="_settings.DigestEnabled" Class="mt-2"
+           Label="Modo resumo — agrupar avisos em uma única mensagem" Color="Color.Primary" />
+@if (_settings.DigestEnabled)
+{
+    <MudNumericField T="int" @bind-Value="_settings.DigestIntervalMinutes"
+                     Label="Intervalo do resumo (min)" Min="1" Max="1440"
+                     Style="max-width: 240px;" />
+}
+
+<div class="d-flex justify-end mt-6">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">
+        Salvar
+    </MudButton>
+</div>
+
+@code {
+    private HealthAlertSettings _settings = new();
+
+    protected override async Task OnInitializedAsync() =>
+        _settings = await SettingsRepo.GetHealthAlertSettingsAsync();
+
+    private async Task SaveAsync()
+    {
+        await SettingsRepo.SaveHealthAlertSettingsAsync(_settings);
+        Snackbar.Add("Configurações de saúde salvas.", Severity.Success);
+    }
+}

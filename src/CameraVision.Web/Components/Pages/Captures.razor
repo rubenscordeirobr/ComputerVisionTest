@@ -5,6 +5,7 @@
 @inject ICaptureIndexer Indexer
 @inject IAlertDispatcher AlertDispatcher
 @inject StoragePaths Storage
+@inject CameraVision.Web.Services.MediaUrls Media
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -229,7 +230,7 @@
         await _table.ReloadServerData();
     }
 
-    private static string MediaUrl(string relPath) => $"/media/{relPath}";
+    private string MediaUrl(string relPath) => Media.For(relPath);
 
     private static string FileNameOf(Capture capture) => Path.GetFileName(capture.FilePath);
 

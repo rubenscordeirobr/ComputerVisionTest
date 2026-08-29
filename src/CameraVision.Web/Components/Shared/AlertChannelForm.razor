@@ -41,16 +41,10 @@ else
     }
 </div>
 
-<MudSelect T="string" MultiSelection="true" @bind-SelectedValues="_selectedClasses" Class="mt-4"
-           Label="Classes que disparam alerta" AnchorOrigin="Origin.BottomCenter"
-           MultiSelectionTextFunc="ClassesSummary" Style="max-width: 480px;">
-    @foreach (var name in DetectableClasses.Names)
-    {
-        <MudSelectItem T="string" Value="@name">
-            @DetectableClasses.Translate(name) (@name)
-        </MudSelectItem>
-    }
-</MudSelect>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mt-4">
+    Quais objetos disparam alerta neste canal é definido por regra em
+    <MudLink Href="/capture-settings">Regras de Captura</MudLink>.
+</MudText>
 
 <div class="d-flex justify-end mt-6">
     <MudButton Variant="Variant.Filled" Color="Color.Primary"
@@ -64,15 +58,11 @@ else
     public AlertChannel Channel { get; set; }
 
     private AlertSettings _settings = new();
-    private IReadOnlyCollection<string> _selectedClasses = [];
     private string _newRecipient = "";
     private string? _recipientError;
 
-    protected override async Task OnInitializedAsync()
-    {
+    protected override async Task OnInitializedAsync() =>
         _settings = await SettingsRepo.GetAlertSettingsAsync(Channel);
-        _selectedClasses = _settings.TriggerClasses.ToHashSet(StringComparer.OrdinalIgnoreCase);
-    }
 
     private string RecipientLabel => Channel == AlertChannel.Email
         ? "E-mail do destinatário"
@@ -124,12 +114,8 @@ else
 
     private void RemoveRecipient(string recipient) => _settings.Recipients.Remove(recipient);
 
-    private string ClassesSummary(IReadOnlyList<string> selected) =>
-        selected.Count == 0 ? "" : string.Join(", ", selected.Select(DetectableClasses.Translate));
-
     private async Task SaveAsync()
     {
-        _settings.TriggerClasses = _selectedClasses.ToList();
         await SettingsRepo.SaveAlertSettingsAsync(_settings);
         Snackbar.Add("Configurações de alerta salvas.", Severity.Success);
     }
