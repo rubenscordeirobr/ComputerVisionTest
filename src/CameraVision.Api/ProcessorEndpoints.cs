@@ -19,7 +19,8 @@ public static class ProcessorEndpoints
 
         group.MapGet("/cameras", async (ICameraRepository cameras, CancellationToken ct) =>
         {
-            var list = await cameras.GetAllAsync(ct);
+            // The worker is tenant-agnostic: it processes every tenant's cameras.
+            var list = await cameras.GetAllAsync(ct: ct);
             var dtos = list
                 .Where(c => c.Enabled && !string.IsNullOrWhiteSpace(c.StreamUrl))
                 .Select(c => new ProcessorCameraDto(c.Id, c.Name, c.StreamUrl, c.SubStreamUrl, c.PreferredStream))
@@ -29,7 +30,9 @@ public static class ProcessorEndpoints
 
         group.MapGet("/capture-rules", async (ICaptureRuleRepository rules, CancellationToken ct) =>
         {
-            var enabled = await rules.GetEnabledAsync(ct);
+            // Union of every tenant's enabled rules — the worker records the superset;
+            // per-tenant correctness is enforced at alert dispatch (SPEC-14).
+            var enabled = await rules.GetEnabledAsync(ct: ct);
             var dto = new CaptureRulesDto(
                 enabled.Select(r => new WorkerRuleDto(
                     r.Classes, r.ConfidenceThreshold, r.ActiveFrom, r.ActiveTo)).ToList(),
@@ -67,6 +70,8 @@ public static class ProcessorEndpoints
     private static async Task<IResult> IngestCaptureAsync(
         HttpRequest request,
         ICaptureRepository captures,
+        ICameraRepository cameras,
+        ITenantRepository tenants,
         IAlertDispatcher dispatcher,
         StoragePaths storage,
         ILogger<Program> logger,
@@ -114,9 +119,18 @@ public static class ProcessorEndpoints
             return Results.Ok(new { id = existing.Id });
         }
 
+        // Footage belongs to the camera's tenant; unknown cameras fall back to the
+        // default tenant so no capture is ever orphaned.
+        var camera = dto.CameraId is { } cameraId ? await cameras.GetByIdAsync(cameraId, ct) : null;
+        camera ??= await cameras.GetByNameAsync(dto.CameraName.Trim(), ct);
+        var tenantId = camera?.TenantId ?? (await tenants.GetDefaultAsync(ct))?.Id;
+        if (tenantId == null)
+            return Results.Conflict("No tenant configured yet.");
+
         var capture = new Capture
         {
-            CameraId = dto.CameraId,
+            TenantId = tenantId.Value,
+            CameraId = camera?.Id,
             CameraName = dto.CameraName.Trim(),
             ObjectClass = dto.ObjectClass.Trim(),
             TrackId = dto.TrackId,

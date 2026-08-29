@@ -1,6 +1,7 @@
 using CameraVision.Api;
 using CameraVision.Core;
 using CameraVision.Core.Alerts;
+using CameraVision.Core.Auth;
 using CameraVision.Core.Entities;
 using CameraVision.Core.Repositories;
 using CameraVision.Infrastructure;
@@ -62,18 +63,28 @@ await DbInitializer.InitializeAsync(
 
 app.UseAuthentication();
 
-// Recorded footage is sensitive — only signed-in web users may stream it, or an
-// alert recipient carrying the capture's playback token (?token=…), which is only
-// valid for that one capture's own file.
+// Recorded footage is sensitive — only signed-in web users of the capture's own
+// tenant may stream it (SuperAdmin: any), or an alert recipient carrying the
+// capture's playback token (?token=…), which is only valid for that one file.
 app.Use(async (context, next) =>
 {
-    if (context.Request.Path.StartsWithSegments("/media", out var relative) &&
-        context.User.Identity?.IsAuthenticated != true &&
-        !await IsValidCaptureTokenAsync(context, relative))
+    if (context.Request.Path.StartsWithSegments("/media", out var relative))
     {
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        await context.Response.WriteAsync("Não autorizado.");
-        return;
+        if (context.User.Identity?.IsAuthenticated == true)
+        {
+            if (!await UserOwnsFileAsync(context, relative))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsync("Acesso negado.");
+                return;
+            }
+        }
+        else if (!await IsValidCaptureTokenAsync(context, relative))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsync("Não autorizado.");
+            return;
+        }
     }
     await next();
 });
@@ -86,6 +97,31 @@ app.UseStaticFiles(new StaticFileOptions
 app.MapProcessorEndpoints();
 
 app.Run();
+
+// Tenant ownership: the requested file (video or its .jpg thumbnail) must belong
+// to a capture of the signed-in user's tenant. Stale cookies without the tenant
+// claim (pre-SPEC-14) are denied — those sessions must sign in again.
+static async Task<bool> UserOwnsFileAsync(HttpContext context, PathString relativePath)
+{
+    if (context.User.IsSuperAdmin())
+        return true;
+
+    var tenantId = context.User.GetTenantId();
+    if (tenantId == null)
+        return false;
+
+    var filePath = relativePath.Value?.TrimStart('/');
+    if (string.IsNullOrEmpty(filePath))
+        return false;
+
+    filePath = Uri.UnescapeDataString(filePath);
+    if (filePath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
+        filePath = Path.ChangeExtension(filePath, ".mp4");
+
+    var captures = context.RequestServices.GetRequiredService<ICaptureRepository>();
+    var capture = await captures.GetByFilePathAsync(filePath, context.RequestAborted);
+    return capture != null && capture.TenantId == tenantId;
+}
 
 static async Task<bool> IsValidCaptureTokenAsync(HttpContext context, PathString relativePath)
 {
