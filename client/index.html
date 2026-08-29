@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Câmeras Anotadas</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 16px; background: #111; color: #eee; font-family: system-ui, sans-serif; }
+  h1 { font-size: 1.1rem; font-weight: 600; margin: 0 0 12px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+  .cam { background: #1b1b1b; border-radius: 8px; overflow: hidden; }
+  .cam header { display: flex; justify-content: space-between; padding: 8px 12px; font-size: .85rem; }
+  .cam .status { color: #999; }
+  .cam .status.ok { color: #6c6; }
+  .cam .status.err { color: #e66; }
+  video { display: block; width: 100%; aspect-ratio: 16/9; background: #000; }
+</style>
+</head>
+<body>
+<h1>Streams anotados das câmeras (via MediaMTX)</h1>
+<div class="grid" id="grid"></div>
+
+<script>
+// ============================================================================
+// Configuration.
+// Camera names must match data/cameras.json (streams are annotated/{name}).
+// Overridable via URL: ?cams=cam_a,cam_b&host=192.168.3.2
+// ============================================================================
+const DEFAULT_CAMERAS = ["camera_frente", "camera_garagem", "camera_fundos"];
+
+const params  = new URLSearchParams(location.search);
+const cameras = (params.get("cams") || DEFAULT_CAMERAS.join(",")).split(",").map(s => s.trim()).filter(Boolean);
+const host    = params.get("host") || location.hostname || "localhost";
+const WEBRTC_PORT = 8889, HLS_PORT = 8888;
+
+const grid = document.getElementById("grid");
+for (const name of cameras) {
+  const card = document.createElement("div");
+  card.className = "cam";
+  card.innerHTML = `
+    <header><span>${name}</span><span class="status">conectando…</span></header>
+    <video autoplay muted playsinline controls></video>`;
+  grid.appendChild(card);
+  play(name, card.querySelector("video"), card.querySelector(".status"));
+}
+
+async function play(name, video, status) {
+  try {
+    await playWebrtc(name, video);
+    status.textContent = "WebRTC";
+    status.className = "status ok";
+  } catch (err) {
+    console.warn(`[${name}] WebRTC failed (${err.message}), trying HLS…`);
+    try {
+      await playHls(name, video);
+      status.textContent = "HLS";
+      status.className = "status ok";
+    } catch (err2) {
+      status.textContent = "offline (o app está publicando?)";
+      status.className = "status err";
+      setTimeout(() => play(name, video, status), 10000); // retry
+    }
+  }
+}
+
+// --- WebRTC via MediaMTX's WHEP endpoint (preferred: sub-second latency) ---
+async function playWebrtc(name, video) {
+  const pc = new RTCPeerConnection();
+  pc.addTransceiver("video", { direction: "recvonly" });
+
+  const gotFrames = new Promise((resolve, reject) => {
+    // Playback starts at the next keyframe, so allow a generous timeout.
+    const timer = setTimeout(() => reject(new Error("timeout")), 15000);
+    pc.ontrack = (e) => {
+      video.srcObject = e.streams[0];
+      video.play().catch(() => {});
+      video.onloadeddata = () => { clearTimeout(timer); resolve(); };
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed") { clearTimeout(timer); reject(new Error("ICE failed")); }
+    };
+  });
+
+  await pc.setLocalDescription(await pc.createOffer());
+  await waitForIceGathering(pc);
+
+  const res = await fetch(`http://${host}:${WEBRTC_PORT}/annotated/${name}/whep`, {
+    method: "POST",
+    headers: { "Content-Type": "application/sdp" },
+    body: pc.localDescription.sdp,
+  });
+  if (!res.ok) { pc.close(); throw new Error(`WHEP ${res.status}`); }
+  await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
+
+  try {
+    await gotFrames;
+  } catch (err) {
+    pc.close();
+    throw err;
+  }
+  return pc;
+}
+
+function waitForIceGathering(pc) {
+  if (pc.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise((resolve) => {
+    const check = () => {
+      if (pc.iceGatheringState === "complete") { pc.removeEventListener("icegatheringstatechange", check); resolve(); }
+    };
+    pc.addEventListener("icegatheringstatechange", check);
+    setTimeout(resolve, 2000); // don't wait forever for candidates
+  });
+}
+
+// --- HLS fallback (a few seconds of latency) ---
+function playHls(name, video) {
+  const url = `http://${host}:${HLS_PORT}/annotated/${name}/index.m3u8`;
+  return new Promise(async (resolve, reject) => {
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = url;
+      video.onloadeddata = () => { video.play().catch(() => {}); resolve(); };
+      video.onerror = () => reject(new Error("native HLS failed"));
+      return;
+    }
+    try {
+      if (!window.Hls) await loadScript("https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js");
+      const hls = new Hls({ lowLatencyMode: true });
+      hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) { hls.destroy(); reject(new Error(data.type)); } });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); resolve(); });
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("failed to load hls.js"));
+    document.head.appendChild(s);
+  });
+}
+</script>
+</body>
+</html>
