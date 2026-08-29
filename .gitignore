@@ -10,3 +10,4 @@ temp/
 .vs/
 .claude/settings.local.json
 *.user
+data/database.backup-*
