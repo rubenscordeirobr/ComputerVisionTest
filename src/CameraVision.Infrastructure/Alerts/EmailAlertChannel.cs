@@ -70,6 +70,8 @@ public sealed class EmailAlertChannel(ILogger<EmailAlertChannel> logger) : IAler
             await client.AuthenticateAsync(system.SmtpUsername, system.SmtpPassword, ct);
         await client.SendAsync(mime, ct);
         await client.DisconnectAsync(quit: true, ct);
+        logger.LogInformation("E-mail \"{Subject}\" sent to {Count} recipient(s).",
+            message.Subject, mime.To.Count);
         return true;
     }
 }
