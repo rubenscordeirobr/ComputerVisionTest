@@ -37,12 +37,12 @@
                 @if (User.Role == UserRole.SuperAdmin)
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
-                        Superadmins não pertencem a nenhuma empresa.
+                        Superadmins não pertencem a nenhum cliente.
                     </MudText>
                 }
                 else
                 {
-                    <MudSelect T="int?" @bind-Value="User.TenantId" Label="Empresa" Class="mt-3"
+                    <MudSelect T="int?" @bind-Value="User.TenantId" Label="Cliente" Class="mt-3"
                                AnchorOrigin="Origin.BottomCenter">
                         @foreach (var tenant in Tenants)
                         {
@@ -102,7 +102,7 @@
             User.TenantId = EditorTenantId;
         if (User.Role != UserRole.SuperAdmin && User.TenantId == null)
         {
-            Snackbar.Add("Selecione a empresa do usuário.", Severity.Warning);
+            Snackbar.Add("Selecione o cliente do usuário.", Severity.Warning);
             return;
         }
 

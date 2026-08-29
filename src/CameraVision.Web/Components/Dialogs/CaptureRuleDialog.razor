@@ -6,7 +6,7 @@
         <MudForm @ref="_form">
             @if (ShowTenantSelect)
             {
-                <MudSelect T="int" @bind-Value="Rule.TenantId" Label="Empresa" Class="mb-3"
+                <MudSelect T="int" @bind-Value="Rule.TenantId" Label="Cliente" Class="mb-3"
                            AnchorOrigin="Origin.BottomCenter">
                     @foreach (var tenant in Tenants)
                     {
@@ -111,7 +111,7 @@
             return;
         if (Rule.TenantId == 0)
         {
-            Snackbar.Add("Selecione a empresa da regra.", Severity.Warning);
+            Snackbar.Add("Selecione o cliente da regra.", Severity.Warning);
             return;
         }
         if (_selectedClasses.Count == 0)

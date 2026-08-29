@@ -8,9 +8,9 @@
 
 @if (_isSuperAdmin)
 {
-    <MudSelect T="int?" @bind-Value="_selectedTenantId" Label="Empresa" Class="mb-4"
+    <MudSelect T="int?" @bind-Value="_selectedTenantId" Label="Cliente" Class="mb-4"
                Style="max-width: 360px;" AnchorOrigin="Origin.BottomCenter"
-               HelperText="Os destinatários de cada canal pertencem à empresa selecionada.">
+               HelperText="Os destinatários de cada canal pertencem ao cliente selecionado.">
         @foreach (var tenant in _tenants)
         {
             <MudSelectItem T="int?" Value="@((int?)tenant.Id)">@tenant.Name</MudSelectItem>

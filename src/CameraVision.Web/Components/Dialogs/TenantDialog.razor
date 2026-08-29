@@ -5,15 +5,15 @@
     <DialogContent>
         <MudForm @ref="_form">
             <MudTextField T="string" @bind-Value="Tenant.Name" Label="Nome" MaxLength="100"
-                          Required="true" RequiredError="Informe o nome da empresa."
+                          Required="true" RequiredError="Informe o nome do cliente."
                           Validation="@(new Func<string, Task<string?>>(ValidateNameAsync))" />
-            <MudSwitch T="bool" @bind-Value="Tenant.IsActive" Label="Ativa"
+            <MudSwitch T="bool" @bind-Value="Tenant.IsActive" Label="Ativo"
                        Color="Color.Success" Class="mt-3" />
             @if (!Tenant.IsActive)
             {
                 <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
-                    Os usuários desta empresa não conseguirão entrar enquanto ela
-                    estiver desativada.
+                    Os usuários deste cliente não conseguirão entrar enquanto ele
+                    estiver desativado.
                 </MudAlert>
             }
         </MudForm>
@@ -47,12 +47,12 @@
         if (IsNew)
         {
             await TenantRepo.AddAsync(Tenant);
-            Snackbar.Add("Empresa criada.", Severity.Success);
+            Snackbar.Add("Cliente criado.", Severity.Success);
         }
         else
         {
             await TenantRepo.UpdateAsync(Tenant);
-            Snackbar.Add("Empresa atualizada.", Severity.Success);
+            Snackbar.Add("Cliente atualizado.", Severity.Success);
         }
         MudDialog.Close(DialogResult.Ok(true));
     }
@@ -64,6 +64,6 @@
         if (string.IsNullOrWhiteSpace(name))
             return null;
         var exists = await TenantRepo.NameExistsAsync(name.Trim(), IsNew ? null : Tenant.Id);
-        return exists ? "Já existe uma empresa com esse nome." : null;
+        return exists ? "Já existe um cliente com esse nome." : null;
     }
 }

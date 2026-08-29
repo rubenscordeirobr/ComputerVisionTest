@@ -24,7 +24,7 @@
             <MudTh>Nome</MudTh>
             @if (_isSuperAdmin)
             {
-                <MudTh>Empresa</MudTh>
+                <MudTh>Cliente</MudTh>
             }
             <MudTh>Perfil</MudTh>
             <MudTh>Ativo</MudTh>
@@ -36,7 +36,7 @@
             <MudTd DataLabel="Nome">@(context.DisplayName ?? "—")</MudTd>
             @if (_isSuperAdmin)
             {
-                <MudTd DataLabel="Empresa">@TenantNameOf(context)</MudTd>
+                <MudTd DataLabel="Cliente">@TenantNameOf(context)</MudTd>
             }
             <MudTd DataLabel="Perfil">
                 @if (context.Role == UserRole.User)

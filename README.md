@@ -73,10 +73,10 @@ dotnet run --project src/CameraVision.Web
   streaming from the API (`/media` on port 5220), restricted to the user's
   own tenant footage.
 - **Multi-tenant (SPEC-14)**: every camera, rule, capture, health event and
-  recipient list belongs to an **Empresa** (tenant). Roles: *Usuário*
+  recipient list belongs to a **Cliente** (tenant). Roles: *Usuário*
   (viewer), *Administrador* (manages their tenant's data + users) and
   *Superadmin* (manages tenants + system settings, sees everything). The
-  SuperAdmin manages tenants in **Empresas** (create, edit,
+  SuperAdmin manages tenants in **Clientes** (create, edit,
   activate/deactivate — users of a deactivated tenant cannot sign in).
 - **Câmeras**: CRUD (incl. substream URL + preferred stream) + health badges
   (ICMP ping for latency, TCP probe for online/offline), worker status column
@@ -102,7 +102,7 @@ dotnet run --project src/CameraVision.Web
 - **Usuários**: admin-only user management (create, edit, deactivate, reset
   password). Tenant admins manage their own tenant; the SuperAdmin manages
   everyone and assigns tenants/roles.
-- **Empresas** / **Sistema**: SuperAdmin-only — tenant management and the
+- **Clientes** / **Sistema**: SuperAdmin-only — tenant management and the
   system configuration (SMTP, Evolution/WhatsApp, public URL).
 
 The API (`src/CameraVision.Api`, port 5220) serves the worker endpoints

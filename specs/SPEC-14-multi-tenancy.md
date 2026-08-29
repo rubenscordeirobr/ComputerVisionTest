@@ -1,10 +1,10 @@
-# SPEC-14 — Multi-tenancy (empresas) and role separation
+# SPEC-14 — Multi-tenancy (clientes) and role separation
 
 ## Objective
 
 Turn the single-tenant management app into a multi-tenant one: every camera,
 capture rule, capture, health event and alert recipient list belongs to a
-**tenant** ("Empresa" in the UI). Users get a role — **User** (viewer),
+**tenant** ("Cliente" in the UI). Users get a role — **User** (viewer),
 **Admin** (tenant administrator) or **SuperAdmin** (platform operator). The
 SuperAdmin manages tenants (create, edit, activate/deactivate) and owns the
 system-wide configuration (SMTP, WhatsApp/Evolution, public URL, health-alert
@@ -35,14 +35,14 @@ First tenant seeded from the current installation:
 - Auth: `role` + `tenant_id` claims; policies `Admin` (Admin or SuperAdmin)
   and `SuperAdmin`; login blocked when the user's tenant is deactivated.
 - Web refactor:
-  - **/tenants** ("Empresas") — SuperAdmin-only CRUD (create, edit, activate/
+  - **/tenants** ("Clientes") — SuperAdmin-only CRUD (create, edit, activate/
     deactivate; no delete).
   - **/system-settings** ("Sistema") — SuperAdmin-only.
   - **/users** — tenant admins see/manage only their tenant; SuperAdmin sees
     all users, picks tenant + role (only SuperAdmin can grant SuperAdmin).
   - **/cameras**, **/captures**, **/capture-settings**, **/alerts**, **/**
     (dashboard) — filtered by the signed-in user's tenant; SuperAdmin sees
-    everything (with an "Empresa" column / selector where relevant).
+    everything (with a "Cliente" column / selector where relevant).
   - Health-alert tuning tab and capture anti-flood section — SuperAdmin-only
     (system-level settings).
 - Alert pipeline routing per tenant: capture alerts and camera-health alerts
@@ -79,7 +79,7 @@ First tenant seeded from the current installation:
 ### Tenant model and data scoping
 
 `Tenant`: `Id`, `Name` (unique, max 100), `IsActive` (default true),
-`CreatedAt`. UI term: **Empresa**.
+`CreatedAt`. UI term: **Cliente**.
 
 Scoping is **explicit**: repository query methods take an `int? tenantId`
 filter (`null` = no filter, used by SuperAdmin views and system services)
@@ -105,7 +105,7 @@ ones plus `role` and `tenant_id` (omitted for system users). Policies:
 `Admin` → role ∈ {Admin, SuperAdmin}; `SuperAdmin` → role = SuperAdmin.
 Shared claim helpers live in `CameraVision.Core.Auth.AppClaims` (used by both
 Web pages and the API media guard). Login additionally rejects users of a
-deactivated tenant ("Empresa desativada.").
+deactivated tenant ("Cliente desativado.").
 
 ### System vs tenant settings
 
@@ -175,7 +175,7 @@ Migration `MultiTenancy` (schema + deterministic backfill, raw SQL inside
 - [ ] API: ingest stamps `TenantId` from the camera (default tenant as
       fallback); `/media` tenant ownership check.
 - [ ] Web: `SuperAdmin` policy + `role`/`tenant_id` claims at login (+ tenant
-      active check); nav gains **Empresas** and hides **Sistema** for
+      active check); nav gains **Clientes** and hides **Sistema** for
       non-SuperAdmin; `/tenants` page + dialog; `/users` tenant/role aware;
       `/system-settings` SuperAdmin-only; tenant filtering on dashboard,
       cameras, captures, rules, playback; per-tenant recipients on `/alerts`
@@ -194,7 +194,7 @@ Migration `MultiTenancy` (schema + deterministic backfill, raw SQL inside
   their recipients and rules, and **cannot** open `/tenants` or
   `/system-settings` (nav hidden + direct URL → acesso negado).
 - SuperAdmin creates/edits/deactivates tenants; users of a deactivated tenant
-  cannot sign in ("Empresa desativada."); SuperAdmin edits system settings
+  cannot sign in ("Cliente desativado."); SuperAdmin edits system settings
   and sees all tenants' data (with tenant column/selector).
 - A capture only triggers alerts for rules and recipients **of its own
   tenant**; health alerts and both digests go to the camera's tenant

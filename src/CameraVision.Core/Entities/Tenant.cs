@@ -1,7 +1,7 @@
 namespace CameraVision.Core.Entities;
 
 /// <summary>
-/// One tenant ("Empresa" in the UI). Owns cameras, capture rules, captures,
+/// One tenant ("Cliente" in the UI). Owns cameras, capture rules, captures,
 /// health events, alert recipients and users. Tenants are never deleted —
 /// deactivating one blocks its users from signing in while keeping the data.
 /// </summary>

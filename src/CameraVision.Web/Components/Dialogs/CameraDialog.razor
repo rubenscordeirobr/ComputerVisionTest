@@ -6,7 +6,7 @@
         <MudForm @ref="_form">
             @if (ShowTenantSelect)
             {
-                <MudSelect T="int" @bind-Value="Camera.TenantId" Label="Empresa" Class="mb-3"
+                <MudSelect T="int" @bind-Value="Camera.TenantId" Label="Cliente" Class="mb-3"
                            AnchorOrigin="Origin.BottomCenter">
                     @foreach (var tenant in Tenants)
                     {
@@ -64,7 +64,7 @@
 
         if (Camera.TenantId == 0)
         {
-            Snackbar.Add("Selecione a empresa da câmera.", Severity.Warning);
+            Snackbar.Add("Selecione o cliente da câmera.", Severity.Warning);
             return;
         }
 

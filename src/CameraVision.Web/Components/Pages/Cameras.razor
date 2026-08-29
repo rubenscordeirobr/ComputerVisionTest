@@ -25,7 +25,7 @@
             <MudTh>Nome</MudTh>
             @if (_isSuperAdmin)
             {
-                <MudTh>Empresa</MudTh>
+                <MudTh>Cliente</MudTh>
             }
             <MudTh>Stream</MudTh>
             <MudTh>IP</MudTh>
@@ -39,7 +39,7 @@
             <MudTd DataLabel="Nome">@context.Name</MudTd>
             @if (_isSuperAdmin)
             {
-                <MudTd DataLabel="Empresa">@TenantNameOf(context.TenantId)</MudTd>
+                <MudTd DataLabel="Cliente">@TenantNameOf(context.TenantId)</MudTd>
             }
             <MudTd DataLabel="Stream">
                 @if (string.IsNullOrWhiteSpace(context.StreamUrl))

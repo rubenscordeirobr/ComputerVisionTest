@@ -4,20 +4,20 @@
 @inject ITenantRepository TenantRepo
 @inject IDialogService DialogService
 
-<PageTitle>Empresas — CameraVision</PageTitle>
+<PageTitle>Clientes — CameraVision</PageTitle>
 
 <div class="d-flex align-center mb-4">
-    <MudText Typo="Typo.h4">Empresas</MudText>
+    <MudText Typo="Typo.h4">Clientes</MudText>
     <MudSpacer />
     <MudButton Variant="Variant.Filled" Color="Color.Primary"
                StartIcon="@Icons.Material.Filled.AddBusiness" OnClick="AddTenantAsync">
-        Nova empresa
+        Novo cliente
     </MudButton>
 </div>
 
 <MudAlert Severity="Severity.Info" Class="mb-4" Style="max-width: 1000px;">
-    Cada empresa tem suas próprias câmeras, regras, capturas, destinatários de alerta
-    e usuários. Desativar uma empresa bloqueia o acesso dos usuários dela sem apagar
+    Cada cliente tem suas próprias câmeras, regras, capturas, destinatários de alerta
+    e usuários. Desativar um cliente bloqueia o acesso dos usuários dele sem apagar
     os dados.
 </MudAlert>
 
@@ -27,28 +27,28 @@
             <MudTh>Nome</MudTh>
             <MudTh>Usuários</MudTh>
             <MudTh>Câmeras</MudTh>
-            <MudTh>Ativa</MudTh>
-            <MudTh>Criada em</MudTh>
+            <MudTh>Ativo</MudTh>
+            <MudTh>Criado em</MudTh>
             <MudTh Style="text-align:right">Ações</MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Nome">@context.Tenant.Name</MudTd>
             <MudTd DataLabel="Usuários">@context.UserCount</MudTd>
             <MudTd DataLabel="Câmeras">@context.CameraCount</MudTd>
-            <MudTd DataLabel="Ativa">
+            <MudTd DataLabel="Ativo">
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
                          Color="@(context.Tenant.IsActive ? Color.Success : Color.Default)">
-                    @(context.Tenant.IsActive ? "Ativa" : "Desativada")
+                    @(context.Tenant.IsActive ? "Ativo" : "Desativado")
                 </MudChip>
             </MudTd>
-            <MudTd DataLabel="Criada em">@context.Tenant.CreatedAt.ToString("dd/MM/yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Criado em">@context.Tenant.CreatedAt.ToString("dd/MM/yyyy HH:mm")</MudTd>
             <MudTd Style="text-align:right; white-space: nowrap;">
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                OnClick="@(() => EditTenantAsync(context.Tenant))" aria-label="Editar" />
             </MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            <MudText Class="mud-text-secondary">Nenhuma empresa cadastrada.</MudText>
+            <MudText Class="mud-text-secondary">Nenhum cliente cadastrado.</MudText>
         </NoRecordsContent>
     </MudTable>
 </MudPaper>
@@ -73,7 +73,7 @@
             { d => d.Tenant, new Tenant() },
             { d => d.IsNew, true },
         };
-        var dialog = await DialogService.ShowAsync<TenantDialog>("Nova empresa", parameters, DialogOpts);
+        var dialog = await DialogService.ShowAsync<TenantDialog>("Novo cliente", parameters, DialogOpts);
         if ((await dialog.Result) is { Canceled: false })
             await LoadAsync();
     }
@@ -92,7 +92,7 @@
             { d => d.Tenant, copy },
             { d => d.IsNew, false },
         };
-        var dialog = await DialogService.ShowAsync<TenantDialog>("Editar empresa", parameters, DialogOpts);
+        var dialog = await DialogService.ShowAsync<TenantDialog>("Editar cliente", parameters, DialogOpts);
         if ((await dialog.Result) is { Canceled: false })
             await LoadAsync();
     }

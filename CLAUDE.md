@@ -38,7 +38,7 @@ Solution `ComputerVisionTest.slnx` (central package management via
   + health monitor + health alerting (debounce, cooldown/flood cap/digest, event
   history), capture rules, capture browser (media streamed from the API),
   settings pages, user management. **Multi-tenant** (SPEC-14): data is scoped by
-  `TenantId` ("Empresa" in the UI); roles User/Admin/SuperAdmin — seeded
+  `TenantId` ("Cliente" in the UI); roles User/Admin/SuperAdmin — seeded
   `admin`/`admin2026` is the tenant-less SuperAdmin (manages tenants + system
   settings), `rubens.cordeiro@live.com.br`/`test` is the first tenant's admin.
   Specs live in `./specs`.

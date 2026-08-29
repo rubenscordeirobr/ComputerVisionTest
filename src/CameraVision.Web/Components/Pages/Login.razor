@@ -80,7 +80,7 @@
             var tenant = await TenantRepo.GetByIdAsync(tenantId);
             if (tenant is not { IsActive: true })
             {
-                _error = "Empresa desativada. Fale com o administrador do sistema.";
+                _error = "Cliente desativado. Fale com o administrador do sistema.";
                 return;
             }
         }
