@@ -1,0 +1,85 @@
+@inject ICameraRepository CameraRepo
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField T="string" @bind-Value="Camera.Name" Label="Nome" MaxLength="100"
+                          Required="true" RequiredError="Informe o nome."
+                          Validation="@(new Func<string, Task<string?>>(ValidateNameAsync))" />
+            <MudTextField T="string" @bind-Value="Camera.StreamUrl" Label="URL do stream (RTSP)" MaxLength="500"
+                          Required="true" RequiredError="Informe a URL do stream."
+                          Validation="@(new Func<string, string?>(ValidateUrl))" Class="mt-3" />
+            <MudTextField T="string" @bind-Value="Camera.IpAddress" Label="Endereço IP (opcional)" MaxLength="64"
+                          Validation="@(new Func<string, string?>(ValidateIp))" Class="mt-3" />
+            <MudSwitch T="bool" @bind-Value="Camera.Enabled" Label="Ativa" Color="Color.Success" Class="mt-3" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Camera Camera { get; set; } = new();
+
+    private MudForm _form = default!;
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        Camera.Name = Camera.Name.Trim();
+        Camera.StreamUrl = Camera.StreamUrl.Trim();
+        Camera.IpAddress = string.IsNullOrWhiteSpace(Camera.IpAddress) ? null : Camera.IpAddress.Trim();
+
+        if (Camera.Id == 0)
+        {
+            await CameraRepo.AddAsync(Camera);
+            Snackbar.Add("Câmera criada.", Severity.Success);
+        }
+        else
+        {
+            await CameraRepo.UpdateAsync(Camera);
+            Snackbar.Add("Câmera atualizada.", Severity.Success);
+        }
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task<string?> ValidateNameAsync(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null; // Required covers empty
+        var exists = await CameraRepo.NameExistsAsync(name.Trim(), Camera.Id == 0 ? null : Camera.Id);
+        return exists ? "Já existe uma câmera com esse nome." : null;
+    }
+
+    private string? ValidateUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) ||
+            uri.Scheme is not ("rtsp" or "http" or "https"))
+            return "URL inválida. Use rtsp://, http:// ou https://.";
+        return null;
+    }
+
+    private string? ValidateIp(string ip)
+    {
+        if (string.IsNullOrWhiteSpace(ip))
+            return null;
+        return System.Net.IPAddress.TryParse(ip.Trim(), out _) ||
+               Uri.CheckHostName(ip.Trim()) != UriHostNameType.Unknown
+            ? null
+            : "Endereço IP inválido.";
+    }
+}

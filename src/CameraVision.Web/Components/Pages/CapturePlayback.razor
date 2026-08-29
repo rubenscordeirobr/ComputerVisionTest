@@ -1,0 +1,67 @@
+@page "/captures/{Id:int}/play"
+@inject ICaptureRepository CaptureRepo
+
+<PageTitle>Reprodução — CameraVision</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+}
+else if (_capture == null)
+{
+    <MudAlert Severity="Severity.Warning" Style="max-width: 600px;" Class="mb-4">
+        Captura não encontrada.
+    </MudAlert>
+    <MudButton Href="/captures" StartIcon="@Icons.Material.Filled.ArrowBack">Voltar para capturas</MudButton>
+}
+else
+{
+    <MudText Typo="Typo.h4" Class="mb-4">Reprodução de captura</MudText>
+
+    <MudPaper Class="pa-4" Style="max-width: 960px;">
+        <video controls autoplay src="@($"/media/{_capture.FilePath}")"
+               style="width: 100%; max-height: 70vh; background: #000;">
+            Seu navegador não suporta a reprodução deste vídeo.
+        </video>
+
+        <MudGrid Class="mt-2" Spacing="1">
+            <MudItem xs="6" sm="3">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Câmera</MudText>
+                <MudText Typo="Typo.body1">@_capture.CameraName</MudText>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Objeto</MudText>
+                <MudText Typo="Typo.body1">@DetectableClasses.Translate(_capture.ObjectClass)</MudText>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Início</MudText>
+                <MudText Typo="Typo.body1">@_capture.StartedAt.ToString("dd/MM/yyyy HH:mm:ss")</MudText>
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Duração</MudText>
+                <MudText Typo="Typo.body1">@_capture.Duration.ToString(@"mm\:ss")</MudText>
+            </MudItem>
+        </MudGrid>
+
+        <div class="d-flex gap-2 mt-4">
+            <MudButton Variant="Variant.Outlined" Href="@($"/media/{_capture.FilePath}")" Target="_blank"
+                       StartIcon="@Icons.Material.Filled.Download">Baixar</MudButton>
+            <MudButton Href="/captures" StartIcon="@Icons.Material.Filled.ArrowBack">Voltar para capturas</MudButton>
+        </div>
+    </MudPaper>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Capture? _capture;
+    private bool _loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _capture = await CaptureRepo.GetByIdAsync(Id);
+        _loading = false;
+    }
+}

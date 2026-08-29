@@ -1,0 +1,108 @@
+@using Microsoft.AspNetCore.Identity
+@inject IUserRepository UserRepo
+@inject IPasswordHasher<AppUser> PasswordHasher
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField T="string" @bind-Value="User.Username" Label="Usuário" MaxLength="64"
+                          Required="true" RequiredError="Informe o nome de usuário."
+                          Validation="@(new Func<string, Task<string?>>(ValidateUsernameAsync))" />
+            <MudTextField T="string" @bind-Value="User.DisplayName" Label="Nome de exibição"
+                          MaxLength="100" Class="mt-3" />
+            @if (IsNew)
+            {
+                <MudTextField T="string" @bind-Value="_password" Label="Senha" Class="mt-3"
+                              InputType="InputType.Password" Required="true"
+                              RequiredError="Informe a senha."
+                              Validation="@(new Func<string, string?>(ValidatePassword))" />
+                <MudTextField T="string" @bind-Value="_passwordConfirm" Label="Confirmar senha" Class="mt-3"
+                              InputType="InputType.Password" Required="true"
+                              RequiredError="Confirme a senha."
+                              Validation="@(new Func<string, string?>(ValidatePasswordConfirm))" />
+            }
+            <MudSwitch T="bool" @bind-Value="User.IsAdmin" Label="Administrador"
+                       Color="Color.Primary" Class="mt-3" />
+            <MudSwitch T="bool" @bind-Value="User.IsActive" Label="Ativo"
+                       Color="Color.Success" Class="mt-1" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public AppUser User { get; set; } = new();
+
+    [Parameter]
+    public bool IsNew { get; set; }
+
+    [Parameter]
+    public int CurrentUserId { get; set; }
+
+    private MudForm _form = default!;
+    private string _password = "";
+    private string _passwordConfirm = "";
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        if (!IsNew && User.Id == CurrentUserId)
+        {
+            if (!User.IsAdmin)
+            {
+                Snackbar.Add("Você não pode remover seu próprio acesso de administrador.", Severity.Warning);
+                return;
+            }
+            if (!User.IsActive)
+            {
+                Snackbar.Add("Você não pode desativar seu próprio usuário.", Severity.Warning);
+                return;
+            }
+        }
+
+        User.Username = User.Username.Trim();
+        User.DisplayName = string.IsNullOrWhiteSpace(User.DisplayName) ? null : User.DisplayName.Trim();
+
+        if (IsNew)
+        {
+            User.PasswordHash = PasswordHasher.HashPassword(User, _password);
+            await UserRepo.AddAsync(User);
+            Snackbar.Add("Usuário criado.", Severity.Success);
+        }
+        else
+        {
+            await UserRepo.UpdateAsync(User);
+            Snackbar.Add("Usuário atualizado.", Severity.Success);
+        }
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task<string?> ValidateUsernameAsync(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            return null;
+        var exists = await UserRepo.UsernameExistsAsync(username.Trim(), IsNew ? null : User.Id);
+        return exists ? "Já existe um usuário com esse nome." : null;
+    }
+
+    private string? ValidatePassword(string password) =>
+        string.IsNullOrEmpty(password) || password.Length >= 6
+            ? null
+            : "A senha deve ter pelo menos 6 caracteres.";
+
+    private string? ValidatePasswordConfirm(string confirm) =>
+        confirm == _password ? null : "As senhas não coincidem.";
+}

@@ -1,0 +1,17 @@
+@page "/alerts"
+@using CameraVision.Web.Components.Shared
+
+<PageTitle>Alertas — CameraVision</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Alertas</MudText>
+
+<MudPaper Style="max-width: 900px;">
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-6">
+        <MudTabPanel Text="E-mail" Icon="@Icons.Material.Filled.Email">
+            <AlertChannelForm Channel="AlertChannel.Email" />
+        </MudTabPanel>
+        <MudTabPanel Text="WhatsApp" Icon="@Icons.Material.Filled.Sms">
+            <AlertChannelForm Channel="AlertChannel.WhatsApp" />
+        </MudTabPanel>
+    </MudTabs>
+</MudPaper>

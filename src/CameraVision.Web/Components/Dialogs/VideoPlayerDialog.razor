@@ -1,0 +1,28 @@
+<MudDialog>
+    <DialogContent>
+        <video controls autoplay src="@VideoUrl" style="width: 100%; max-height: 70vh; background: #000;">
+            Seu navegador não suporta a reprodução deste vídeo.
+        </video>
+        @if (!string.IsNullOrEmpty(Details))
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@Details</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Href="@VideoUrl" Target="_blank" StartIcon="@Icons.Material.Filled.Download">Baixar</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Close">Fechar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public string VideoUrl { get; set; } = "";
+
+    [Parameter]
+    public string? Details { get; set; }
+
+    private void Close() => MudDialog.Close();
+}

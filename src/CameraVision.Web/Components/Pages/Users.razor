@@ -1,0 +1,125 @@
+@page "/users"
+@attribute [Authorize(Policy = "Admin")]
+@using System.Security.Claims
+@using CameraVision.Web.Components.Dialogs
+@inject IUserRepository UserRepo
+@inject IDialogService DialogService
+
+<PageTitle>Usuários — CameraVision</PageTitle>
+
+<div class="d-flex align-center mb-4">
+    <MudText Typo="Typo.h4">Usuários</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="AddUserAsync">
+        Novo usuário
+    </MudButton>
+</div>
+
+<MudPaper>
+    <MudTable Items="_users" Hover="true" Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh>Usuário</MudTh>
+            <MudTh>Nome</MudTh>
+            <MudTh>Administrador</MudTh>
+            <MudTh>Ativo</MudTh>
+            <MudTh>Criado em</MudTh>
+            <MudTh Style="text-align:right">Ações</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Usuário">@context.Username</MudTd>
+            <MudTd DataLabel="Nome">@(context.DisplayName ?? "—")</MudTd>
+            <MudTd DataLabel="Administrador">
+                @if (context.IsAdmin)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">Sim</MudChip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Não</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Ativo">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Color="@(context.IsActive ? Color.Success : Color.Default)">
+                    @(context.IsActive ? "Ativo" : "Desativado")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Criado em">@context.CreatedAt.ToString("dd/MM/yyyy HH:mm")</MudTd>
+            <MudTd Style="text-align:right; white-space: nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                               OnClick="@(() => EditUserAsync(context))" aria-label="Editar" />
+                <MudIconButton Icon="@Icons.Material.Filled.Key" Size="Size.Small"
+                               OnClick="@(() => ResetPasswordAsync(context))" aria-label="Redefinir senha" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudPaper>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private IReadOnlyList<AppUser> _users = [];
+    private bool _loading = true;
+    private int _currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState;
+        _ = int.TryParse(auth.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out _currentUserId);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _users = await UserRepo.GetAllAsync();
+        _loading = false;
+    }
+
+    private async Task AddUserAsync()
+    {
+        var parameters = new DialogParameters<UserDialog>
+        {
+            { d => d.User, new AppUser() },
+            { d => d.IsNew, true },
+            { d => d.CurrentUserId, _currentUserId },
+        };
+        var dialog = await DialogService.ShowAsync<UserDialog>("Novo usuário", parameters, DialogOpts);
+        if ((await dialog.Result) is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task EditUserAsync(AppUser user)
+    {
+        var copy = new AppUser
+        {
+            Id = user.Id,
+            Username = user.Username,
+            DisplayName = user.DisplayName,
+            PasswordHash = user.PasswordHash,
+            IsAdmin = user.IsAdmin,
+            IsActive = user.IsActive,
+            CreatedAt = user.CreatedAt,
+        };
+        var parameters = new DialogParameters<UserDialog>
+        {
+            { d => d.User, copy },
+            { d => d.IsNew, false },
+            { d => d.CurrentUserId, _currentUserId },
+        };
+        var dialog = await DialogService.ShowAsync<UserDialog>("Editar usuário", parameters, DialogOpts);
+        if ((await dialog.Result) is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task ResetPasswordAsync(AppUser user)
+    {
+        var parameters = new DialogParameters<ResetPasswordDialog> { { d => d.User, user } };
+        await DialogService.ShowAsync<ResetPasswordDialog>(
+            $"Redefinir senha — {user.Username}", parameters, DialogOpts);
+    }
+
+    private static readonly DialogOptions DialogOpts = new() { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
+}

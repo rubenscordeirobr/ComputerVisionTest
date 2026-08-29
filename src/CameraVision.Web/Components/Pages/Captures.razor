@@ -1,0 +1,238 @@
+@page "/captures"
+@using CameraVision.Core.Alerts
+@using CameraVision.Web.Components.Dialogs
+@inject ICaptureRepository CaptureRepo
+@inject ICaptureIndexer Indexer
+@inject IAlertDispatcher AlertDispatcher
+@inject StoragePaths Storage
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Capturas — CameraVision</PageTitle>
+
+<div class="d-flex align-center mb-4">
+    <MudText Typo="Typo.h4">Capturas</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="_scanning"
+               StartIcon="@Icons.Material.Filled.Refresh" OnClick="RescanAsync">
+        @(_scanning ? "Reindexando…" : "Reindexar")
+    </MudButton>
+</div>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="6" md="3">
+            <MudDateRangePicker @bind-DateRange="_dateRange" Label="Período" Clearable="true"
+                                PickerVariant="PickerVariant.Dialog" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" @bind-Value="_cameraFilter" Label="Câmera" Clearable="true"
+                       AnchorOrigin="Origin.BottomCenter">
+                @foreach (var name in _cameraNames)
+                {
+                    <MudSelectItem T="string" Value="@name">@name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" @bind-Value="_classFilter" Label="Classe" Clearable="true"
+                       AnchorOrigin="Origin.BottomCenter">
+                @foreach (var name in _classNames)
+                {
+                    <MudSelectItem T="string" Value="@name">@DetectableClasses.Translate(name)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="1">
+            <MudNumericField T="int?" @bind-Value="_trackFilter" Label="Track" Clearable="true" Min="0" />
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-center gap-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFiltersAsync">Filtrar</MudButton>
+            <MudButton Variant="Variant.Text" OnClick="ClearFiltersAsync">Limpar</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudPaper>
+    <MudTable T="Capture" @ref="_table" ServerData="LoadServerDataAsync" Hover="true" Dense="true"
+              RowsPerPage="25" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh></MudTh>
+            <MudTh>Câmera</MudTh>
+            <MudTh>Classe</MudTh>
+            <MudTh>Track</MudTh>
+            <MudTh>Início</MudTh>
+            <MudTh>Duração</MudTh>
+            <MudTh>Tamanho</MudTh>
+            <MudTh Style="text-align:right">Ações</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>
+                @if (context.ThumbnailPath != null)
+                {
+                    <img src="@MediaUrl(context.ThumbnailPath)" alt="miniatura"
+                         style="height: 48px; border-radius: 4px; display: block;" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Movie" Class="mud-text-secondary" />
+                }
+            </MudTd>
+            <MudTd DataLabel="Câmera">@context.CameraName</MudTd>
+            <MudTd DataLabel="Classe">
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">
+                    @DetectableClasses.Translate(context.ObjectClass)
+                </MudChip>
+                @if (context.IsMerged)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text">completo</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Track">@(context.TrackId is { } track ? $"#{track}" : "—")</MudTd>
+            <MudTd DataLabel="Início">@context.StartedAt.ToString("dd/MM/yyyy HH:mm:ss")</MudTd>
+            <MudTd DataLabel="Duração">@FormatDuration(context.Duration)</MudTd>
+            <MudTd DataLabel="Tamanho">@($"{context.FileSizeBytes / 1024d / 1024d:0.0} MB")</MudTd>
+            <MudTd Style="text-align:right; white-space: nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => PlayAsync(context))" aria-label="Reproduzir" />
+                <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small"
+                               Href="@MediaUrl(context.FilePath)" download="@FileNameOf(context)"
+                               aria-label="Baixar" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteAsync(context))" aria-label="Excluir" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary">Nenhuma captura encontrada.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager RowsPerPageString="Itens por página:" InfoFormat="{first_item}-{last_item} de {all_items}" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private MudTable<Capture> _table = default!;
+    private DateRange? _dateRange;
+    private string? _cameraFilter;
+    private string? _classFilter;
+    private int? _trackFilter;
+    private IReadOnlyList<string> _cameraNames = [];
+    private IReadOnlyList<string> _classNames = [];
+    private bool _scanning;
+
+    protected override async Task OnInitializedAsync() => await LoadFilterOptionsAsync();
+
+    private async Task LoadFilterOptionsAsync()
+    {
+        _cameraNames = await CaptureRepo.GetDistinctCameraNamesAsync();
+        _classNames = await CaptureRepo.GetDistinctClassesAsync();
+    }
+
+    private async Task<TableData<Capture>> LoadServerDataAsync(TableState state, CancellationToken ct)
+    {
+        var filter = new CaptureFilter
+        {
+            DateFrom = _dateRange?.Start?.Date,
+            DateTo = _dateRange?.End?.Date.AddDays(1),
+            CameraName = _cameraFilter,
+            ObjectClass = _classFilter,
+            TrackId = _trackFilter,
+            Skip = state.Page * state.PageSize,
+            Take = state.PageSize,
+        };
+        var page = await CaptureRepo.QueryAsync(filter, ct);
+        return new TableData<Capture> { Items = page.Items, TotalItems = page.TotalCount };
+    }
+
+    private Task ApplyFiltersAsync() => _table.ReloadServerData();
+
+    private async Task ClearFiltersAsync()
+    {
+        _dateRange = null;
+        _cameraFilter = null;
+        _classFilter = null;
+        _trackFilter = null;
+        await _table.ReloadServerData();
+    }
+
+    private async Task RescanAsync()
+    {
+        _scanning = true;
+        try
+        {
+            var result = await Indexer.ScanAsync();
+            Snackbar.Add(
+                $"Reindexação concluída: {result.AddedCaptures.Count} adicionada(s), {result.RemovedCount} removida(s).",
+                Severity.Success);
+            if (result.AddedCaptures.Count > 0)
+            {
+                // Alerting must not block the UI; the dispatcher logs its own failures.
+                _ = Task.Run(() => AlertDispatcher.DispatchAsync(result.AddedCaptures));
+            }
+            await LoadFilterOptionsAsync();
+            await _table.ReloadServerData();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Falha ao reindexar a pasta de saída.", Severity.Error);
+        }
+        finally
+        {
+            _scanning = false;
+        }
+    }
+
+    private async Task PlayAsync(Capture capture)
+    {
+        var details = $"{capture.CameraName} — {DetectableClasses.Translate(capture.ObjectClass)} — " +
+                      $"{capture.StartedAt:dd/MM/yyyy HH:mm:ss} ({FormatDuration(capture.Duration)})";
+        var parameters = new DialogParameters<VideoPlayerDialog>
+        {
+            { d => d.VideoUrl, MediaUrl(capture.FilePath) },
+            { d => d.Details, details },
+        };
+        await DialogService.ShowAsync<VideoPlayerDialog>("Reprodução", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true });
+    }
+
+    private async Task DeleteAsync(Capture capture)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Excluir captura",
+            $"Excluir o vídeo de {capture.StartedAt:dd/MM/yyyy HH:mm:ss} ({capture.CameraName})? " +
+            "O arquivo será removido do disco.",
+            yesText: "Excluir", cancelText: "Cancelar");
+        if (confirmed != true)
+            return;
+
+        try
+        {
+            var videoPath = Path.Combine(Storage.OutputRoot, capture.FilePath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(videoPath))
+                File.Delete(videoPath);
+            if (capture.ThumbnailPath != null)
+            {
+                var thumbPath = Path.Combine(Storage.OutputRoot, capture.ThumbnailPath.Replace('/', Path.DirectorySeparatorChar));
+                if (File.Exists(thumbPath))
+                    File.Delete(thumbPath);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Não foi possível excluir o arquivo de vídeo.", Severity.Error);
+            return;
+        }
+
+        await CaptureRepo.DeleteAsync(capture.Id);
+        Snackbar.Add("Captura excluída.", Severity.Success);
+        await _table.ReloadServerData();
+    }
+
+    private static string MediaUrl(string relPath) => $"/media/{relPath}";
+
+    private static string FileNameOf(Capture capture) => Path.GetFileName(capture.FilePath);
+
+    private static string FormatDuration(TimeSpan duration) =>
+        duration.TotalHours >= 1 ? duration.ToString(@"h\:mm\:ss") : duration.ToString(@"mm\:ss");
+}

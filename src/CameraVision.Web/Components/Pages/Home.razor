@@ -1,0 +1,74 @@
+@page "/"
+@inject ICameraRepository CameraRepo
+@inject ICaptureRepository CaptureRepo
+
+<PageTitle>Painel — CameraVision</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Painel</MudText>
+
+<MudGrid>
+    <MudItem xs="12" sm="6" md="4">
+        <MudCard>
+            <MudCardContent>
+                <div class="d-flex align-center gap-3">
+                    <MudIcon Icon="@Icons.Material.Filled.Videocam" Color="Color.Primary" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h5">@_camerasEnabled / @_camerasTotal</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Câmeras ativas</MudText>
+                    </div>
+                </div>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/cameras" Color="Color.Primary">Gerenciar câmeras</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudCard>
+            <MudCardContent>
+                <div class="d-flex align-center gap-3">
+                    <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Color="Color.Primary" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h5">@_capturesTotal</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Capturas no total</MudText>
+                    </div>
+                </div>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/captures" Color="Color.Primary">Ver capturas</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudCard>
+            <MudCardContent>
+                <div class="d-flex align-center gap-3">
+                    <MudIcon Icon="@Icons.Material.Filled.Today" Color="Color.Primary" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h5">@_capturesToday</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Capturas hoje</MudText>
+                    </div>
+                </div>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/captures" Color="Color.Primary">Ver capturas</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private int _camerasTotal;
+    private int _camerasEnabled;
+    private int _capturesTotal;
+    private int _capturesToday;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var cameras = await CameraRepo.GetAllAsync();
+        _camerasTotal = cameras.Count;
+        _camerasEnabled = cameras.Count(c => c.Enabled);
+        _capturesTotal = await CaptureRepo.CountAsync();
+        _capturesToday = await CaptureRepo.CountAsync(DateTime.Today);
+    }
+}

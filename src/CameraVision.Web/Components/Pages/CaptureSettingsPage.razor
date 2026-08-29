@@ -1,0 +1,88 @@
+@page "/capture-settings"
+@inject ISettingsRepository SettingsRepo
+@inject ISnackbar Snackbar
+
+<PageTitle>Configurações de Captura — CameraVision</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Configurações de Captura</MudText>
+
+<MudAlert Severity="Severity.Info" Class="mb-4" Style="max-width: 760px;">
+    O pipeline de detecção ainda lê o arquivo <code>appsettings.json</code>. Estes valores
+    passarão a controlá-lo em uma versão futura.
+</MudAlert>
+
+<MudPaper Class="pa-6" Style="max-width: 760px;">
+    <MudForm @ref="_form">
+        <MudSelect T="string" MultiSelection="true" @bind-SelectedValues="_selectedClasses"
+                   Label="Classes monitoradas" AnchorOrigin="Origin.BottomCenter"
+                   MultiSelectionTextFunc="ClassesSummary"
+                   HelperText="Objetos destas classes são gravados quando detectados.">
+            @foreach (var name in DetectableClasses.Names)
+            {
+                <MudSelectItem T="string" Value="@name">
+                    @DetectableClasses.Translate(name) (@name)
+                </MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudNumericField T="int" @bind-Value="_settings.MaxSegmentSeconds" Class="mt-4"
+                         Label="Duração máxima do segmento (s)" Min="5" Max="3600"
+                         HelperText="Ao atingir este limite, o vídeo é dividido em um novo segmento." />
+
+        <MudNumericField T="double" @bind-Value="_settings.LingerSeconds" Class="mt-4"
+                         Label="Tempo de espera após o objeto sair (s)" Min="0" Max="300" Step="0.5"
+                         HelperText="A captura é finalizada este tempo depois que o objeto deixa o quadro." />
+
+        <div class="mt-6">
+            <MudText Typo="Typo.body1">
+                Confiança mínima: <b>@(_settings.ConfidenceThreshold.ToString("P0"))</b>
+            </MudText>
+            <MudSlider T="double" @bind-Value="_settings.ConfidenceThreshold"
+                       Min="0.05" Max="0.95" Step="0.05" Color="Color.Primary" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Um objeto só inicia uma gravação após atingir esta confiança.
+            </MudText>
+        </div>
+
+        <div class="d-flex justify-end mt-6">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">
+                Salvar
+            </MudButton>
+        </div>
+    </MudForm>
+</MudPaper>
+
+@code {
+    private CaptureSettings _settings = new();
+    private IReadOnlyCollection<string> _selectedClasses = [];
+    private MudForm _form = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = await SettingsRepo.GetCaptureSettingsAsync();
+        _selectedClasses = _settings.TrackedClasses.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private string ClassesSummary(IReadOnlyList<string> selected) =>
+        selected.Count == 0
+            ? ""
+            : string.Join(", ", selected.Select(DetectableClasses.Translate));
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        if (_selectedClasses.Count == 0)
+        {
+            Snackbar.Add("Selecione ao menos uma classe para monitorar.", Severity.Warning);
+            return;
+        }
+
+        _settings.TrackedClasses = _selectedClasses.ToList();
+        await SettingsRepo.SaveCaptureSettingsAsync(_settings);
+        Snackbar.Add("Configurações salvas.", Severity.Success);
+    }
+}

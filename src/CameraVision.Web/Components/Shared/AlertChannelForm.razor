@@ -1,0 +1,136 @@
+@inject ISettingsRepository SettingsRepo
+@inject ISnackbar Snackbar
+
+@if (Channel == AlertChannel.Email)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        Alertas por e-mail são enviados automaticamente quando uma nova captura corresponde
+        às regras (requer SMTP configurado em <b>Sistema</b>).
+    </MudAlert>
+}
+else
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        O envio por WhatsApp será implementado em uma versão futura — esta tela apenas
+        armazena a configuração.
+    </MudAlert>
+}
+
+<MudSwitch T="bool" @bind-Value="_settings.Enabled" Label="Ativado" Color="Color.Success" />
+
+<MudText Typo="Typo.subtitle1" Class="mt-4 mb-1">Destinatários</MudText>
+<div class="d-flex align-start gap-2">
+    <MudTextField T="string" @bind-Value="_newRecipient" Label="@RecipientLabel" Immediate="true"
+                  Error="@(_recipientError != null)" ErrorText="@_recipientError"
+                  OnKeyDown="OnRecipientKeyDown" Style="max-width: 360px;" />
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="AddRecipient">
+        Adicionar
+    </MudButton>
+</div>
+<div class="d-flex flex-wrap gap-1 mt-2">
+    @if (_settings.Recipients.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Nenhum destinatário adicionado.</MudText>
+    }
+    @foreach (var recipient in _settings.Recipients)
+    {
+        <MudChip T="string" Color="Color.Default" OnClose="@(() => RemoveRecipient(recipient))">
+            @recipient
+        </MudChip>
+    }
+</div>
+
+<MudSelect T="string" MultiSelection="true" @bind-SelectedValues="_selectedClasses" Class="mt-4"
+           Label="Classes que disparam alerta" AnchorOrigin="Origin.BottomCenter"
+           MultiSelectionTextFunc="ClassesSummary" Style="max-width: 480px;">
+    @foreach (var name in DetectableClasses.Names)
+    {
+        <MudSelectItem T="string" Value="@name">
+            @DetectableClasses.Translate(name) (@name)
+        </MudSelectItem>
+    }
+</MudSelect>
+
+<div class="d-flex justify-end mt-6">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">
+        Salvar
+    </MudButton>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public AlertChannel Channel { get; set; }
+
+    private AlertSettings _settings = new();
+    private IReadOnlyCollection<string> _selectedClasses = [];
+    private string _newRecipient = "";
+    private string? _recipientError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = await SettingsRepo.GetAlertSettingsAsync(Channel);
+        _selectedClasses = _settings.TriggerClasses.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private string RecipientLabel => Channel == AlertChannel.Email
+        ? "E-mail do destinatário"
+        : "Número do WhatsApp (ex.: +5549999999999)";
+
+    private void OnRecipientKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            AddRecipient();
+    }
+
+    private void AddRecipient()
+    {
+        _recipientError = null;
+        var value = _newRecipient.Trim();
+        if (value.Length == 0)
+            return;
+
+        if (Channel == AlertChannel.Email)
+        {
+            if (!System.Net.Mail.MailAddress.TryCreate(value, out _))
+            {
+                _recipientError = "E-mail inválido.";
+                return;
+            }
+        }
+        else
+        {
+            value = NormalizePhone(value);
+            if (!System.Text.RegularExpressions.Regex.IsMatch(value, @"^\+?\d{10,15}$"))
+            {
+                _recipientError = "Número inválido. Use o formato +5549999999999.";
+                return;
+            }
+        }
+
+        if (_settings.Recipients.Contains(value, StringComparer.OrdinalIgnoreCase))
+        {
+            _recipientError = "Destinatário já adicionado.";
+            return;
+        }
+
+        _settings.Recipients.Add(value);
+        _newRecipient = "";
+    }
+
+    private static string NormalizePhone(string value) =>
+        value.Replace(" ", "").Replace("-", "").Replace("(", "").Replace(")", "");
+
+    private void RemoveRecipient(string recipient) => _settings.Recipients.Remove(recipient);
+
+    private string ClassesSummary(IReadOnlyList<string> selected) =>
+        selected.Count == 0 ? "" : string.Join(", ", selected.Select(DetectableClasses.Translate));
+
+    private async Task SaveAsync()
+    {
+        _settings.TriggerClasses = _selectedClasses.ToList();
+        await SettingsRepo.SaveAlertSettingsAsync(_settings);
+        Snackbar.Add("Configurações de alerta salvas.", Severity.Success);
+    }
+}

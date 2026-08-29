@@ -1,0 +1,101 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout Layout.LoginLayout
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using Microsoft.AspNetCore.Identity
+@inject IUserRepository UserRepo
+@inject IPasswordHasher<AppUser> PasswordHasher
+@inject NavigationManager Navigation
+
+<PageTitle>Entrar — CameraVision</PageTitle>
+
+<div class="login-card">
+    <div class="login-title">
+        <span class="login-logo">📹</span>
+        <h1>CameraVision</h1>
+    </div>
+
+    <EditForm Model="Input" method="post" OnValidSubmit="LoginAsync" FormName="login">
+        <label class="login-label" for="username">Usuário</label>
+        <InputText id="username" class="login-input" @bind-Value="Input.Username"
+                   autocomplete="username" autofocus />
+
+        <label class="login-label" for="password">Senha</label>
+        <InputText id="password" type="password" class="login-input" @bind-Value="Input.Password"
+                   autocomplete="current-password" />
+
+        @if (_error != null)
+        {
+            <div class="login-error">@_error</div>
+        }
+
+        <button type="submit" class="login-button">Entrar</button>
+    </EditForm>
+</div>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(Name = "Input")]
+    private LoginModel? InputRaw { get; set; }
+
+    private LoginModel Input => InputRaw ??= new();
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    private string? ReturnUrl { get; set; }
+
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        // Already signed in — go straight to the app.
+        if (HttpContext.User.Identity?.IsAuthenticated == true)
+            Navigation.NavigateTo(SafeReturnUrl());
+    }
+
+    private async Task LoginAsync()
+    {
+        var user = await UserRepo.GetByUsernameAsync(Input.Username.Trim());
+        if (user == null ||
+            PasswordHasher.VerifyHashedPassword(user, user.PasswordHash, Input.Password) ==
+            PasswordVerificationResult.Failed)
+        {
+            _error = "Usuário ou senha inválidos.";
+            return;
+        }
+        if (!user.IsActive)
+        {
+            _error = "Usuário desativado. Fale com um administrador.";
+            return;
+        }
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.Username),
+            new("display_name", user.DisplayName ?? user.Username),
+            new("is_admin", user.IsAdmin ? "true" : "false"),
+        };
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        await HttpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            new ClaimsPrincipal(identity),
+            new AuthenticationProperties { IsPersistent = true });
+
+        Navigation.NavigateTo(SafeReturnUrl());
+    }
+
+    /// <summary>Local-only redirect target (prevents open redirects).</summary>
+    private string SafeReturnUrl() =>
+        string.IsNullOrWhiteSpace(ReturnUrl) ? "/" : "/" + ReturnUrl.TrimStart('/');
+
+    private sealed class LoginModel
+    {
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+}

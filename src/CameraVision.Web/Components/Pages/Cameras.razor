@@ -1,0 +1,163 @@
+@page "/cameras"
+@using CameraVision.Core.Health
+@using CameraVision.Web.Components.Dialogs
+@implements IDisposable
+@inject ICameraRepository CameraRepo
+@inject ICameraHealthService Health
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Câmeras — CameraVision</PageTitle>
+
+<div class="d-flex align-center mb-4">
+    <MudText Typo="Typo.h4">Câmeras</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="AddCameraAsync">
+        Nova câmera
+    </MudButton>
+</div>
+
+<MudPaper>
+    <MudTable Items="_cameras" Hover="true" Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh>Nome</MudTh>
+            <MudTh>Stream</MudTh>
+            <MudTh>IP</MudTh>
+            <MudTh>Ativa</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Latência</MudTh>
+            <MudTh Style="text-align:right">Ações</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Nome">@context.Name</MudTd>
+            <MudTd DataLabel="Stream">
+                @if (string.IsNullOrWhiteSpace(context.StreamUrl))
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                }
+                else
+                {
+                    <MudTooltip Text="@context.StreamUrl">
+                        <MudText Typo="Typo.body2">@Truncate(context.StreamUrl, 45)</MudText>
+                    </MudTooltip>
+                }
+            </MudTd>
+            <MudTd DataLabel="IP">@(context.IpAddress ?? "—")</MudTd>
+            <MudTd DataLabel="Ativa">
+                <MudSwitch T="bool" Value="context.Enabled" Color="Color.Success"
+                           ValueChanged="@((bool value) => ToggleEnabledAsync(context, value))" />
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @{ var (label, color) = StatusFor(context); }
+                <MudChip T="string" Color="@color" Size="Size.Small" Variant="Variant.Filled">@label</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Latência">@LatencyFor(context)</MudTd>
+            <MudTd Style="text-align:right">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                               OnClick="@(() => EditCameraAsync(context))" aria-label="Editar" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteCameraAsync(context))" aria-label="Excluir" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary">Nenhuma câmera cadastrada.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private IReadOnlyList<Camera> _cameras = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Health.Changed += OnHealthChanged;
+        await LoadAsync();
+    }
+
+    public void Dispose() => Health.Changed -= OnHealthChanged;
+
+    private void OnHealthChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _cameras = await CameraRepo.GetAllAsync();
+        _loading = false;
+    }
+
+    private (string Label, Color Color) StatusFor(Camera camera)
+    {
+        if (!camera.Enabled)
+            return ("Desativada", Color.Default);
+        if (string.IsNullOrWhiteSpace(camera.StreamUrl) && string.IsNullOrWhiteSpace(camera.IpAddress))
+            return ("Sem stream", Color.Default);
+
+        return Health.TryGet(camera.Id)?.Status switch
+        {
+            CameraStatus.Online => ("Online", Color.Success),
+            CameraStatus.Offline => ("Offline", Color.Error),
+            _ => ("Verificando…", Color.Default),
+        };
+    }
+
+    private string LatencyFor(Camera camera)
+    {
+        var health = Health.TryGet(camera.Id);
+        if (!camera.Enabled || health is null)
+            return "—";
+        var ms = health.PingMs ?? health.ConnectMs;
+        return ms is null ? "—" : $"{ms} ms";
+    }
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..max] + "…";
+
+    private async Task ToggleEnabledAsync(Camera camera, bool enabled)
+    {
+        camera.Enabled = enabled;
+        await CameraRepo.UpdateAsync(camera);
+    }
+
+    private async Task AddCameraAsync()
+    {
+        var parameters = new DialogParameters<CameraDialog> { { d => d.Camera, new Camera() } };
+        var dialog = await DialogService.ShowAsync<CameraDialog>("Nova câmera", parameters, DialogOpts);
+        if ((await dialog.Result) is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task EditCameraAsync(Camera camera)
+    {
+        var copy = new Camera
+        {
+            Id = camera.Id,
+            Name = camera.Name,
+            StreamUrl = camera.StreamUrl,
+            IpAddress = camera.IpAddress,
+            Enabled = camera.Enabled,
+            CreatedAt = camera.CreatedAt,
+        };
+        var parameters = new DialogParameters<CameraDialog> { { d => d.Camera, copy } };
+        var dialog = await DialogService.ShowAsync<CameraDialog>("Editar câmera", parameters, DialogOpts);
+        if ((await dialog.Result) is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task DeleteCameraAsync(Camera camera)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Excluir câmera",
+            $"Excluir a câmera \"{camera.Name}\"? As capturas já gravadas serão mantidas.",
+            yesText: "Excluir", cancelText: "Cancelar");
+        if (confirmed == true)
+        {
+            await CameraRepo.DeleteAsync(camera.Id);
+            Snackbar.Add("Câmera excluída.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private static readonly DialogOptions DialogOpts = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+}
