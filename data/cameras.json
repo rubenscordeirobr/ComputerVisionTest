@@ -1,0 +1,47 @@
+[
+  {
+    "id": 1,
+    "name": "camera_frente",
+    "ipAddress": "192.168.3.82",
+    "port": 554,
+    "username": "jchn",
+    "password": "t5dk8a",
+    "rtspUrl": "rtsp://192.168.3.82:554/user=jchn&password=t5dk8a&channel=1&stream=0.sdp?real_stream",
+    "subRtspUrl": "rtsp://192.168.3.82:554/user=jchn&password=t5dk8a&channel=1&stream=1.sdp?real_stream",
+    "stream": "main",
+    "enabled": true,
+    "protocol": "RTSP",
+    "status": "online",
+    "brand": "iCSee/XM"
+  },
+  {
+    "id": 2,
+    "name": "camera_garagem",
+    "ipAddress": "192.168.3.81",
+    "port": 554,
+    "username": "awjd",
+    "password": "cn6mau",
+    "rtspUrl": "rtsp://192.168.3.81:554/user=awjd&password=cn6mau&channel=1&stream=0.sdp?real_stream",
+    "subRtspUrl": "rtsp://192.168.3.81:554/user=awjd&password=cn6mau&channel=1&stream=1.sdp?real_stream",
+    "stream": "sub",
+    "enabled": true,
+    "protocol": "RTSP",
+    "status": "online",
+    "brand": "iCSee/XM"
+  },
+  {
+    "id": 3,
+    "name": "camera_fundos",
+    "ipAddress": "192.168.3.83",
+    "port": 554,
+    "username": "xykt",
+    "password": "fy4krh",
+    "rtspUrl": "rtsp://192.168.3.83:554/user=xykt&password=fy4krh&channel=1&stream=0.sdp?real_stream",
+    "subRtspUrl": "rtsp://192.168.3.83:554/user=xykt&password=fy4krh&channel=1&stream=1.sdp?real_stream",
+    "stream": "main",
+    "enabled": true,
+    "protocol": "RTSP",
+    "status": "online",
+    "brand": "iCSee/XM"
+  }
+]
