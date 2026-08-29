@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CameraVision/CameraVision.csproj" />
+    <Project Path="src/CameraVision.Core/CameraVision.Core.csproj" />
+    <Project Path="src/CameraVision.Infrastructure/CameraVision.Infrastructure.csproj" />
+    <Project Path="src/CameraVision.Web/CameraVision.Web.csproj" />
+  </Folder>
+</Solution>
