@@ -21,3 +21,10 @@ public interface ICameraHealthService
     CameraHealth? TryGet(int cameraId);
     event Action? Changed;
 }
+
+/// <summary>Receives every probe cycle's full results (drives the health-alert state machine).</summary>
+public interface ICameraHealthCycleListener
+{
+    Task OnCycleAsync(IReadOnlyList<(Entities.Camera Camera, CameraHealth Health)> results,
+        CancellationToken ct);
+}

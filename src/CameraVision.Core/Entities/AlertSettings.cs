@@ -6,7 +6,11 @@ public enum AlertChannel
     WhatsApp,
 }
 
-/// <summary>Per-channel alert configuration (one row per channel).</summary>
+/// <summary>
+/// Per-channel delivery configuration (one row per channel): master switch +
+/// recipients. What triggers an alert is decided by the capture rules
+/// (CaptureRule) and the health-alert settings — not here.
+/// </summary>
 public class AlertSettings
 {
     public int Id { get; set; }
@@ -15,7 +19,4 @@ public class AlertSettings
 
     /// <summary>Email addresses or phone numbers, depending on the channel.</summary>
     public List<string> Recipients { get; set; } = [];
-
-    /// <summary>English COCO class names that trigger alerts.</summary>
-    public List<string> TriggerClasses { get; set; } = [];
 }
