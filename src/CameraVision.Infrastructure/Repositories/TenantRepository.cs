@@ -59,11 +59,20 @@ public class TenantRepository(IDbContextFactory<AppDbContext> factory) : ITenant
             t => t.Name.ToLower() == name.ToLower() && (excludeId == null || t.Id != excludeId), ct);
     }
 
-    public async Task AddAsync(Tenant tenant, CancellationToken ct = default)
+    public async Task AddWithAdminAsync(Tenant tenant, AppUser admin, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
         db.Tenants.Add(tenant);
+        await db.SaveChangesAsync(ct); // materializes tenant.Id for the FK below
+
+        admin.TenantId = tenant.Id;
+        admin.Role = UserRole.Admin;
+        db.Users.Add(admin);
         await db.SaveChangesAsync(ct);
+
+        await transaction.CommitAsync(ct);
     }
 
     public async Task UpdateAsync(Tenant tenant, CancellationToken ct = default)

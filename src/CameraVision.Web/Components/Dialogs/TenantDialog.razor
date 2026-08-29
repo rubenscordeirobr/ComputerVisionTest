@@ -1,4 +1,8 @@
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
 @inject ITenantRepository TenantRepo
+@inject IUserRepository UserRepo
+@inject IPasswordHasher<AppUser> PasswordHasher
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -15,6 +19,27 @@
                     Os usuários deste cliente não conseguirão entrar enquanto ele
                     estiver desativado.
                 </MudAlert>
+            }
+            @if (IsNew)
+            {
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.subtitle1">Usuário administrador</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                    Todo cliente precisa de um administrador para acessar o sistema.
+                </MudText>
+                <MudTextField T="string" @bind-Value="_adminUsername" Label="Usuário" MaxLength="64"
+                              Required="true" RequiredError="Informe o nome de usuário."
+                              Validation="@(new Func<string, Task<string?>>(ValidateUsernameAsync))" />
+                <MudTextField T="string" @bind-Value="_adminDisplayName" Label="Nome de exibição"
+                              MaxLength="100" Class="mt-3" />
+                <MudTextField T="string" @bind-Value="_adminPassword" Label="Senha" Class="mt-3"
+                              InputType="InputType.Password" Required="true"
+                              RequiredError="Informe a senha."
+                              Validation="@(new Func<string, string?>(ValidatePassword))" />
+                <MudTextField T="string" @bind-Value="_adminPasswordConfirm" Label="Confirmar senha" Class="mt-3"
+                              InputType="InputType.Password" Required="true"
+                              RequiredError="Confirme a senha."
+                              Validation="@(new Func<string, string?>(ValidatePasswordConfirm))" />
             }
         </MudForm>
     </DialogContent>
@@ -35,6 +60,10 @@
     public bool IsNew { get; set; }
 
     private MudForm _form = default!;
+    private string _adminUsername = "";
+    private string? _adminDisplayName;
+    private string _adminPassword = "";
+    private string _adminPasswordConfirm = "";
 
     private async Task SaveAsync()
     {
@@ -44,15 +73,35 @@
 
         Tenant.Name = Tenant.Name.Trim();
 
-        if (IsNew)
+        try
         {
-            await TenantRepo.AddAsync(Tenant);
-            Snackbar.Add("Cliente criado.", Severity.Success);
+            if (IsNew)
+            {
+                var admin = new AppUser
+                {
+                    Username = _adminUsername.Trim(),
+                    DisplayName = string.IsNullOrWhiteSpace(_adminDisplayName)
+                        ? null
+                        : _adminDisplayName.Trim(),
+                    Role = UserRole.Admin,
+                    IsActive = true,
+                };
+                admin.PasswordHash = PasswordHasher.HashPassword(admin, _adminPassword);
+
+                await TenantRepo.AddWithAdminAsync(Tenant, admin);
+                Snackbar.Add("Cliente e usuário administrador criados.", Severity.Success);
+            }
+            else
+            {
+                await TenantRepo.UpdateAsync(Tenant);
+                Snackbar.Add("Cliente atualizado.", Severity.Success);
+            }
         }
-        else
+        catch (DbUpdateException)
         {
-            await TenantRepo.UpdateAsync(Tenant);
-            Snackbar.Add("Cliente atualizado.", Severity.Success);
+            // Unique-name race with a concurrent save (client name or username).
+            Snackbar.Add("Não foi possível salvar: nome do cliente ou usuário já existe.", Severity.Error);
+            return;
         }
         MudDialog.Close(DialogResult.Ok(true));
     }
@@ -66,4 +115,20 @@
         var exists = await TenantRepo.NameExistsAsync(name.Trim(), IsNew ? null : Tenant.Id);
         return exists ? "Já existe um cliente com esse nome." : null;
     }
+
+    private async Task<string?> ValidateUsernameAsync(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            return null;
+        var exists = await UserRepo.UsernameExistsAsync(username.Trim());
+        return exists ? "Já existe um usuário com esse nome." : null;
+    }
+
+    private string? ValidatePassword(string password) =>
+        string.IsNullOrEmpty(password) || password.Length >= 6
+            ? null
+            : "A senha deve ter pelo menos 6 caracteres.";
+
+    private string? ValidatePasswordConfirm(string confirm) =>
+        confirm == _adminPassword ? null : "As senhas não coincidem.";
 }
