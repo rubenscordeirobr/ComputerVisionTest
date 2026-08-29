@@ -48,3 +48,10 @@ threshold — persisted in the `CaptureSettings` singleton row.
 - Edited values survive an app restart (persisted in SQLite).
 - Validation blocks: empty class list, out-of-range numbers; PT-BR messages.
 - All labels/messages PT-BR; build green.
+
+## Changelog
+
+- 2026-08-29 — **Superseded by SPEC-10**: the single settings form was
+  replaced by the capture-rules list (multiple rules, each with its own
+  classes, thresholds and alert channels). This spec remains as history of
+  the v1 behavior; the singleton's values were migrated into the first rule.

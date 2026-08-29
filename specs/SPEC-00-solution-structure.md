@@ -76,3 +76,10 @@ None (first spec). Requires .NET SDK 10.0.x (10.0.400 is installed).
   behavior change to the console app).
 - `dotnet run --project src/CameraVision.Web` serves the template placeholder
   page.
+
+## Changelog
+
+- 2026-08-29 — v2 refactor: the solution later gains `CameraVision.Api`
+  (SPEC-11) and the console app is renamed to `CameraVision.DetectionWorker`
+  (SPEC-12); the original "no Web API" constraint was dropped by the v2
+  request.

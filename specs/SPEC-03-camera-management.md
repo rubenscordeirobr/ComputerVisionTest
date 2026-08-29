@@ -91,3 +91,7 @@ Full camera CRUD on `/cameras` plus periodic health monitoring (online/offline
   cameras (grey **Sem stream** chip) instead of failing to parse a URL. The
   camera dialog still requires a stream URL — completing auto-created cameras
   is the intended path to enable them.
+- 2026-08-29 — v2 refactor: camera dialog gains substream URL + preferred
+  stream; the table gains a **Processador** status column and a **Histórico**
+  action (SPEC-11/13). The probe monitor additionally feeds the health-alert
+  state machine (SPEC-13) — probing behavior itself is unchanged.

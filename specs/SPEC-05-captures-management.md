@@ -125,3 +125,9 @@ delete.
   entities so SPEC-09 can dispatch alerts for them; thumbnail extraction
   retries at `-ss 0` for very short clips; scans explicitly serialized;
   idempotency called out as an acceptance criterion.
+- 2026-08-29 — v2 refactor: media is now served by the API (SPEC-11) — the
+  web pages build `img`/`video`/download URLs from `Api:MediaBaseUrl` instead
+  of a local `/media`. New captures normally arrive through the worker's API
+  ingest with a worker-generated thumbnail (SPEC-12); this indexer stays as
+  the idempotent reconciliation path (backlog, files the worker failed to
+  report, deletions).

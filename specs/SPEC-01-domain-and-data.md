@@ -118,3 +118,9 @@ Interfaces in `Core` (implementations in `Infrastructure`):
   playback link, SPEC-09). `Camera.StreamUrl` is no longer required at the
   entity level (the capture import auto-creates URL-less cameras, SPEC-05).
   Admin seeding explicitly deferred to SPEC-08.
+- 2026-08-29 — v2 refactor: `CaptureSettings` singleton replaced by the
+  `CaptureRules` table and `AlertSettings.TriggerClasses` dropped (SPEC-10);
+  `Camera` gains `SubStreamUrl`/`PreferredStream`/`ProcessorStatus(At)`
+  (SPEC-11); new `HealthAlertSettings` + `CameraHealthEvent` tables (SPEC-13).
+  Each change ships in its own follow-up migration. SQLite runs in WAL mode
+  with a busy timeout because Web and Api now share the database file.

@@ -66,20 +66,32 @@ in the message, link to an in-app playback page), and a registered-but-inert
   - HTML body: heading, **thumbnail embedded inline** via CID linked resource
     (never the video file; omitted gracefully when no thumbnail exists),
     camera / class / start time / duration lines, and a button-style link
-    **Assistir vídeo** → `{PublicBaseUrl}/captures/{id}/play`;
+    **Assistir vídeo** → `{base}/captures/{id}/watch?token={token}` (public
+    playback page, no sign-in — see below);
   - plain-text alternative part with the same info + URL.
-- `PublicBaseUrl` empty → log a warning and fall back to
-  `http://localhost:5210` so links still work on the host machine.
+- Base URL: `SystemSettings.PublicBaseUrl` when filled in, otherwise the
+  deployment's `CaptureLinks:PublicBaseUrl` from `appsettings.json`; both empty
+  → log a warning and fall back to `http://localhost:5210`.
 - Skip sending (log a warning) when `SmtpHost` or sender e-mail is not
   configured.
 
-## Playback page
+## Playback pages
 
-- `/captures/{id:int}/play` — `[Authorize]` like every page (an e-mailed link
-  first passes the login screen, then returns via `returnUrl`): video player
-  (`/media/{FilePath}`), capture metadata (câmera, classe, início, duração),
-  **Baixar** link and a back link to `/captures`. PT-BR "Captura não
-  encontrada." when the id is unknown or the file is gone.
+- `/captures/{id:int}/play` — the internal page, `[Authorize]` like every other
+  page: video player (`/media/{FilePath}`), capture metadata (câmera, classe,
+  início, duração), **Baixar** link and a back link to `/captures`. PT-BR
+  "Captura não encontrada." when the id is unknown or the file is gone.
+- `/captures/{id:int}/watch?token=…` — the **public** page linked from alert
+  e-mails (`Components/PublicPages/CaptureWatch.razor`, outside the `[Authorize]`
+  folder, `PublicLayout` without navigation). No authentication: the token is
+  an HMAC over the capture id (`CaptureLinkService`, key
+  `CaptureLinks:Secret`, identical in Web and Api), so a recipient reaches
+  exactly the capture they were alerted about and nothing else. Invalid token
+  or missing capture → PT-BR "Link inválido — a captura não está mais
+  disponível."
+- The video `src` is the API media URL carrying the same token; the API's
+  `/media` guard (SPEC-11) accepts a request without the auth cookie when the
+  token matches the capture whose `FilePath` is being requested.
 
 ## Tasks
 
@@ -93,6 +105,11 @@ in the message, link to an in-app playback page), and a registered-but-inert
       action.
 - [ ] `CapturePlayback.razor` (`/captures/{id:int}/play`) as described; the
       captures table's play dialog remains unchanged.
+- [ ] `Core`: `CaptureLinkOptions` + `CaptureLinkService` (token, playback and
+      media URLs); register both in Web and Api from the `CaptureLinks` config
+      section.
+- [ ] `CaptureWatch.razor` (`/captures/{id:int}/watch`) + `PublicLayout`;
+      token-aware `/media` guard in the API.
 - [ ] Manual end-to-end check with real SMTP credentials (user-provided):
       enable Email alerts for `person`, record/import a fresh capture,
       receive the e-mail, click the link, log in, watch the video.
@@ -114,3 +131,18 @@ in the message, link to an in-app playback page), and a registered-but-inert
   (SPEC-06), no message is ever sent, and the channel class is the single
   place a future implementation plugs into.
 - Build green; full solution builds; console pipeline untouched.
+
+## Changelog
+
+- 2026-08-29 — Alert links are now public and tokenized: the e-mail button
+  points at `/captures/{id}/watch?token=…` so a recipient watches the clip
+  without a CameraVision account, and the host names moved to the
+  `CaptureLinks` section of `appsettings.json` (the DB setting still wins when
+  filled in).
+- 2026-08-29 — v2 refactor: `IAlertChannel` generalized to a content-agnostic
+  `AlertMessage` (SPEC-10) so SPEC-13 health/digest messages reuse the same
+  channels; trigger evaluation moved from `AlertSettings.TriggerClasses` to
+  capture rules; the API's capture ingest (SPEC-11) also invokes the
+  dispatcher, giving near-instant alerts for worker-reported captures (the
+  indexer path remains for reconciled files — insert-once semantics still
+  prevent double alerts).

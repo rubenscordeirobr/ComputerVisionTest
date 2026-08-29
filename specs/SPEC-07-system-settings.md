@@ -55,7 +55,9 @@ message sending.
 - [ ] Page section **Aplicação** — `MudForm`: **URL pública**
       (`SystemSettings.PublicBaseUrl`, absolute http/https URI, e.g.
       `http://192.168.3.2:5210`) with a PT-BR helper text explaining it is
-      used to build the playback links inside alert e-mails (SPEC-09);
+      used to build the playback links inside alert e-mails (SPEC-09); left
+      empty, the deployment's `CaptureLinks:PublicBaseUrl` from
+      `appsettings.json` is used;
       **Salvar** → snackbar.
 - [ ] Page section **WhatsApp (Evolution API)** — `MudForm`: URL base
       (absolute http/https URI), API Key (password-style), Nome da instância;

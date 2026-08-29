@@ -61,3 +61,8 @@ No sending logic.
   (SPEC-09), so the "future version" info alert applies to WhatsApp only;
   the Email tab explains when emails are actually sent. The configuration
   model and forms are unchanged.
+- 2026-08-29 — v2 refactor: `TriggerClasses` removed — what triggers an alert
+  is now decided per capture rule (SPEC-10), so each channel tab keeps only
+  the master switch + recipients (with a hint pointing to Regras de Captura).
+  The page gains a third tab, **Saúde das câmeras**, holding the SPEC-13
+  health-alert and anti-flood settings.
