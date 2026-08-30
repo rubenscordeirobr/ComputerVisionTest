@@ -1,0 +1,81 @@
+@inject IEvolutionApiClient Evolution
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField T="string" @bind-Value="_number" Label="Número de destino"
+                          Placeholder="+5549999999999" Immediate="true"
+                          Required="true" RequiredError="Informe o número de destino."
+                          Validation="@(new Func<string, string?>(ValidatePhone))" />
+            <MudTextField T="string" @bind-Value="_message" Label="Mensagem" Class="mt-3"
+                          Lines="5" Required="true" RequiredError="Informe a mensagem." />
+        </MudForm>
+
+        @if (_error != null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@_sending">Cancelar</MudButton>
+        <MudButton Color="Color.Success" Variant="Variant.Filled" OnClick="SendAsync"
+                   Disabled="@_sending" StartIcon="@Icons.Material.Filled.Send">
+            @(_sending ? "Enviando..." : "Enviar")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>The page's (possibly unsaved) settings, so edits apply without saving first.</summary>
+    [Parameter, EditorRequired]
+    public SystemSettings Settings { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private string _number = "";
+    private string _message =
+        $"Mensagem de teste do CameraVision 📷\n" +
+        $"Enviada em {DateTime.Now:dd/MM/yyyy HH:mm}. " +
+        "Se você recebeu esta mensagem, o canal de alertas por WhatsApp está funcionando.";
+    private string? _error;
+    private bool _sending;
+
+    private static string NormalizePhone(string value) =>
+        value.Replace(" ", "").Replace("-", "").Replace("(", "").Replace(")", "");
+
+    private string? ValidatePhone(string value) =>
+        string.IsNullOrWhiteSpace(value) ||
+        System.Text.RegularExpressions.Regex.IsMatch(NormalizePhone(value), @"^\+?\d{10,15}$")
+            ? null
+            : "Número inválido. Use o formato +5549999999999.";
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SendAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        _sending = true;
+        _error = null;
+        try
+        {
+            var result = await Evolution.SendTextAsync(Settings, NormalizePhone(_number), _message.Trim());
+            if (!result.Success)
+            {
+                _error = result.Error;
+                return;
+            }
+            Snackbar.Add("Mensagem de teste enviada.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+}

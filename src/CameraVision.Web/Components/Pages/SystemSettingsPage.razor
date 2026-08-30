@@ -1,8 +1,10 @@
 @page "/system-settings"
 @attribute [Authorize(Policy = "SuperAdmin")]
+@using CameraVision.Web.Components.Dialogs
 @implements IDisposable
 @inject ISettingsRepository SettingsRepo
 @inject IEvolutionApiClient Evolution
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <PageTitle>Sistema — CameraVision</PageTitle>
@@ -99,6 +101,10 @@
                    StartIcon="@Icons.Material.Filled.QrCode2" OnClick="GenerateQrAsync">
             @(_qr == null ? "Gerar QR Code" : "Atualizar QR")
         </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Success" Disabled="@(!EvolutionConfigured)"
+                   StartIcon="@Icons.Material.Filled.Send" OnClick="OpenTestDialogAsync">
+            Enviar mensagem de teste
+        </MudButton>
     </div>
 
     @if (!EvolutionConfigured)
@@ -153,8 +159,24 @@
     private DateTime _lastQrAt;
     private CancellationTokenSource? _pollCts;
 
-    protected override async Task OnInitializedAsync() =>
+    protected override async Task OnInitializedAsync()
+    {
         _settings = await SettingsRepo.GetSystemSettingsAsync();
+        if (EvolutionConfigured)
+            _ = RefreshConnectionOnLoadAsync();
+    }
+
+    private async Task RefreshConnectionOnLoadAsync()
+    {
+        var state = await Evolution.GetStateAsync(_settings);
+        // Errors here (API down, instance not created yet) keep "Não verificado" —
+        // the user hasn't asked for anything, so don't alarm them.
+        if (state.Connection != EvolutionConnection.Error)
+        {
+            _connection = state.Connection;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 
     public void Dispose()
     {
@@ -184,12 +206,29 @@
             ? null
             : "URL inválida. Use http:// ou https://.";
 
+    private Task OpenTestDialogAsync()
+    {
+        var parameters = new DialogParameters<WhatsAppTestDialog> { { d => d.Settings, _settings } };
+        return DialogService.ShowAsync<WhatsAppTestDialog>("Mensagem de teste — WhatsApp", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+    }
+
     private async Task GenerateQrAsync()
     {
         _pairing = true;
         _pairError = null;
         try
         {
+            // An already-paired instance returns no QR — show "connected", not an error.
+            // Any state error (e.g. instance not created yet) falls through to connect.
+            var state = await Evolution.GetStateAsync(_settings);
+            if (state.Connection == EvolutionConnection.Open)
+            {
+                _connection = EvolutionConnection.Open;
+                _qr = null;
+                return;
+            }
+
             var qr = await Evolution.ConnectAsync(_settings);
             if (qr.Error != null)
             {
