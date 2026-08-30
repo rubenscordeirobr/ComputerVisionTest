@@ -29,7 +29,7 @@ The HTML client never talks to the .NET app — it plays the processed streams
 # 1. One-time: download/export the YOLO26n model to ./models/yolo26n.onnx
 .\scripts\download-model.ps1
 
-# 2. Start MediaMTX + Evolution API (WhatsApp)
+# 2. Start MediaMTX + Evolution API (WhatsApp) + Caddy (HTTPS)
 docker compose up -d
 
 # 3. Start the management API + web app (optional but recommended)
@@ -226,6 +226,22 @@ The session survives container restarts (`DEL_INSTANCE=false`, instance state
 in Postgres). Because this is not the official WhatsApp Business API, use a
 dedicated number — numbers sending automated messages this way can be banned
 by WhatsApp.
+
+## HTTPS (Caddy)
+
+The same `docker compose up -d` also starts a Caddy reverse proxy that
+publishes the apps as `https://cameras.vemlogo.com:8443` — port 8443 because
+80/443 on this host belong to unrelated services. `/media/*` routes to the
+API (5220); everything else to the web app (5210), WebSockets included. The
+Let's Encrypt certificate is obtained and auto-renewed through a Porkbun
+**DNS-01** challenge (the `caddy/Dockerfile` builds Caddy with the
+`caddy-dns/porkbun` module), so certificate issuance needs no inbound port —
+only the site itself needs the router to forward 8443. Put the Porkbun API
+credentials in `./.env` (`PORKBUN_API_KEY` / `PORKBUN_API_SECRET`,
+gitignored) and enable **API Access** for the domain in the Porkbun
+dashboard. Alert links use this origin through "URL pública" on the Sistema
+page (WhatsApp only makes links clickable when the host is a real domain,
+not an IP).
 
 ## GPU notes
 

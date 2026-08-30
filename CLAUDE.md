@@ -10,7 +10,7 @@ Multi-camera computer-vision prototype: connects to RTSP cameras, runs YOLO26n d
 
 ```powershell
 .\scripts\download-model.ps1          # one-time: export ./models/yolo26n.onnx
-docker compose up -d                  # start MediaMTX + Evolution API (WhatsApp)
+docker compose up -d                  # start MediaMTX + Evolution API (WhatsApp) + Caddy (HTTPS on 8443)
 dotnet run --project src/CameraVision.Api             # processor API + media streaming → http://localhost:5220
 dotnet run --project src/CameraVision.Web             # management web app → http://localhost:5210
 dotnet run --project src/CameraVision.DetectionWorker # detection worker (from repo root)
