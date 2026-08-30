@@ -11,3 +11,6 @@ temp/
 .claude/settings.local.json
 *.user
 data/database.backup-*
+
+# Local secrets for docker compose (Porkbun API key for Caddy DNS-01)
+.env

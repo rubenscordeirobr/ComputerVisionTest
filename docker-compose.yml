@@ -12,6 +12,24 @@ services:
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
 
+  # HTTPS reverse proxy for cameras.vemlogo.com on port 8443 (80/443 belong to
+  # other services on this host). Certificate via Porkbun DNS-01 — put the API
+  # credentials in ./.env (PORKBUN_API_KEY / PORKBUN_API_SECRET, gitignored).
+  caddy:
+    build: ./caddy
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+      - "8443:8443/udp"    # HTTP/3
+    environment:
+      - PORKBUN_API_KEY=${PORKBUN_API_KEY:-}
+      - PORKBUN_API_SECRET=${PORKBUN_API_SECRET:-}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
   # WhatsApp gateway (unofficial API via Baileys). The web app pairs a number by
   # QR code on the Sistema page; alerts are sent through POST /message/send*.
   # AUTHENTICATION_API_KEY must match the "API Key" field in system settings.
@@ -69,6 +87,8 @@ services:
       - evolution_redis:/data
 
 volumes:
+  caddy_data:
+  caddy_config:
   evolution_instances:
   evolution_postgres:
   evolution_redis:
