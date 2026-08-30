@@ -20,6 +20,16 @@ cameras.vemlogo.com:8443 {
 		reverse_proxy host.docker.internal:5220
 	}
 
+	# Live annotated streams from MediaMTX: WebRTC signaling (WHEP) and HLS.
+	# The media itself flows over WebRTC's own UDP port (8189), not through here.
+	handle_path /webrtc/* {
+		reverse_proxy mediamtx:8889
+	}
+
+	handle_path /hls/* {
+		reverse_proxy mediamtx:8888
+	}
+
 	handle {
 		reverse_proxy host.docker.internal:5210
 	}
