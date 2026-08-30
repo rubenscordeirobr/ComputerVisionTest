@@ -96,6 +96,10 @@
             <MudTd Style="text-align:right; white-space: nowrap;">
                 <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Primary"
                                OnClick="@(() => PlayAsync(context))" aria-label="Reproduzir" />
+                <MudTooltip Text="Alertas enviados">
+                    <MudIconButton Icon="@Icons.Material.Filled.NotificationsActive" Size="Size.Small"
+                                   OnClick="@(() => ShowAlertLogsAsync(context))" aria-label="Alertas" />
+                </MudTooltip>
                 <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small"
                                Href="@MediaUrl(context.FilePath)" download="@FileNameOf(context)"
                                aria-label="Baixar" />
@@ -205,6 +209,16 @@
         };
         await DialogService.ShowAsync<VideoPlayerDialog>("Reprodução", parameters,
             new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true });
+    }
+
+    private async Task ShowAlertLogsAsync(Capture capture)
+    {
+        var parameters = new DialogParameters<CaptureAlertLogsDialog>
+        {
+            { d => d.Capture, capture },
+        };
+        await DialogService.ShowAsync<CaptureAlertLogsDialog>("Alertas da captura", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true });
     }
 
     private async Task DeleteAsync(Capture capture)

@@ -104,15 +104,26 @@
     </MudTable>
 </MudPaper>
 
-@if (_isSuperAdmin)
+@if (_alertTenantId != null)
 {
 <MudPaper Class="pa-6 mt-4" Style="max-width: 1000px;">
     <MudText Typo="Typo.h6" Class="mb-2">Antiflood de alertas</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-        Com o agrupamento ativado, os alertas de captura são enviados como um único
-        resumo por período (o primeiro aviso após um período calmo ainda sai em até
-        30 segundos; os demais entram no próximo resumo).
+        Configuração do cliente: com o agrupamento ativado, os alertas de captura são
+        enviados como um único resumo por período (o primeiro aviso após um período calmo
+        ainda sai em até 30 segundos; os demais entram no próximo resumo).
     </MudText>
+    @if (_isSuperAdmin)
+    {
+        <MudSelect T="int?" Value="_alertTenantId" ValueChanged="OnAlertTenantChangedAsync"
+                   Label="Cliente" Class="mb-3" Style="max-width: 360px;"
+                   AnchorOrigin="Origin.BottomCenter">
+            @foreach (var tenant in _tenants)
+            {
+                <MudSelectItem T="int?" Value="@((int?)tenant.Id)">@tenant.Name</MudSelectItem>
+            }
+        </MudSelect>
+    }
     <div class="d-flex align-center flex-wrap gap-4">
         <MudSwitch T="bool" @bind-Value="_alertSettings.GroupingEnabled"
                    Label="Agrupar alertas de captura" Color="Color.Primary" />
@@ -140,6 +151,7 @@
     private bool _isSuperAdmin;
     private int? _tenantFilter;
     private int? _ownTenantId;
+    private int? _alertTenantId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -151,15 +163,35 @@
         {
             _tenants = await TenantRepo.GetAllAsync();
             _tenantNames = _tenants.ToDictionary(t => t.Id, t => t.Name);
-            _alertSettings = await SettingsRepo.GetCaptureAlertSettingsAsync();
+            _alertTenantId = _tenants.FirstOrDefault()?.Id;
         }
+        else
+        {
+            _alertTenantId = _ownTenantId;
+        }
+        await LoadAlertSettingsAsync();
         await LoadAsync();
     }
 
     private string TenantNameOf(int tenantId) => _tenantNames.GetValueOrDefault(tenantId, "—");
 
+    private async Task LoadAlertSettingsAsync()
+    {
+        if (_alertTenantId is { } tenantId)
+            _alertSettings = await SettingsRepo.GetCaptureAlertSettingsAsync(tenantId);
+    }
+
+    private async Task OnAlertTenantChangedAsync(int? tenantId)
+    {
+        _alertTenantId = tenantId;
+        await LoadAlertSettingsAsync();
+    }
+
     private async Task SaveAlertSettingsAsync()
     {
+        if (_alertTenantId is not { } tenantId)
+            return;
+        _alertSettings.TenantId = tenantId;
         await SettingsRepo.SaveCaptureAlertSettingsAsync(_alertSettings);
         Snackbar.Add("Configurações de antiflood salvas.", Severity.Success);
     }

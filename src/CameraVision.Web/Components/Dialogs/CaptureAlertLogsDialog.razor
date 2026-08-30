@@ -1,0 +1,91 @@
+@inject ICaptureAlertLogRepository LogsRepo
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            @if (Capture.AlertQueuedAt != null && Capture.AlertSentAt == null)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    Alerta na fila — será enviado no próximo resumo agrupado.
+                </MudAlert>
+            }
+            @if (_entries.Count == 0)
+            {
+                <MudText Class="mud-text-secondary">Nenhum alerta registrado para esta captura.</MudText>
+            }
+            else
+            {
+                <MudTable Items="_entries" Dense="true" Hover="true">
+                    <HeaderContent>
+                        <MudTh>Quando</MudTh>
+                        <MudTh>Canal</MudTh>
+                        <MudTh>Regra</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Detalhe</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Quando">@context.Log.SentAt.ToString("dd/MM/yyyy HH:mm:ss")</MudTd>
+                        <MudTd DataLabel="Canal">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                                     Color="@(context.Log.Channel == AlertChannel.Email ? Color.Primary : Color.Success)"
+                                     Icon="@ChannelIcon(context.Log.Channel)">
+                                @ChannelLabel(context.Log.Channel)
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Regra">@context.RuleName</MudTd>
+                        <MudTd DataLabel="Status">
+                            @if (context.Log.Status == CaptureAlertStatus.Success)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Enviado</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Falha</MudChip>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Detalhe">@(context.Log.ErrorMessage ?? "—")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="Close">Fechar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Capture Capture { get; set; } = new();
+
+    private IReadOnlyList<CaptureAlertLogEntry> _entries = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _entries = await LogsRepo.GetByCaptureAsync(Capture.Id);
+        _loading = false;
+    }
+
+    private static string ChannelIcon(AlertChannel channel) => channel switch
+    {
+        AlertChannel.WhatsApp => Icons.Material.Filled.Sms,
+        _ => Icons.Material.Filled.Email,
+    };
+
+    private static string ChannelLabel(AlertChannel channel) => channel switch
+    {
+        AlertChannel.WhatsApp => "WhatsApp",
+        _ => "E-mail",
+    };
+
+    private void Close() => MudDialog.Close();
+}
