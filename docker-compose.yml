@@ -11,3 +11,64 @@ services:
       - "9997:9997"          # MediaMTX API (optional, handy for debugging)
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
+
+  # WhatsApp gateway (unofficial API via Baileys). The web app pairs a number by
+  # QR code on the Sistema page; alerts are sent through POST /message/send*.
+  # AUTHENTICATION_API_KEY must match the "API Key" field in system settings.
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: evolution-api
+    restart: unless-stopped
+    depends_on:
+      - evolution-postgres
+      - evolution-redis
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_URL=http://localhost:8080
+      - AUTHENTICATION_API_KEY=cameravision-evolution-key
+      - LANGUAGE=pt-BR
+      - CONFIG_SESSION_PHONE_CLIENT=CameraVision
+      - DEL_INSTANCE=false
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://evolution:evolution@evolution-postgres:5432/evolution?schema=public
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=false
+      - DATABASE_SAVE_MESSAGE_UPDATE=false
+      - DATABASE_SAVE_DATA_CONTACTS=false
+      - DATABASE_SAVE_DATA_CHATS=false
+      - DATABASE_SAVE_DATA_LABELS=false
+      - DATABASE_SAVE_DATA_HISTORIC=false
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://evolution-redis:6379/6
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_REDIS_SAVE_INSTANCES=false
+      - CACHE_LOCAL_ENABLED=false
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  evolution-postgres:
+    image: postgres:15
+    container_name: evolution-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=evolution
+      - POSTGRES_PASSWORD=evolution
+      - POSTGRES_DB=evolution
+    volumes:
+      - evolution_postgres:/var/lib/postgresql/data
+
+  evolution-redis:
+    image: redis:7
+    container_name: evolution-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - evolution_redis:/data
+
+volumes:
+  evolution_instances:
+  evolution_postgres:
+  evolution_redis:
