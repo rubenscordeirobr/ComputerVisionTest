@@ -18,7 +18,7 @@ The HTML client never talks to the .NET app — it plays the processed streams
 
 - .NET 10 SDK
 - FFmpeg on PATH (`winget install Gyan.FFmpeg`)
-- Docker (for MediaMTX)
+- Docker (for MediaMTX and the Evolution API WhatsApp gateway)
 - `uv` or Python 3.10+ (only for the one-time model export)
 - Optional, for GPU inference: NVIDIA GPU + **CUDA Toolkit 12.x** + **cuDNN 9.x**
   (their `bin` folders on PATH). Without them the app automatically falls back to CPU.
@@ -29,7 +29,7 @@ The HTML client never talks to the .NET app — it plays the processed streams
 # 1. One-time: download/export the YOLO26n model to ./models/yolo26n.onnx
 .\scripts\download-model.ps1
 
-# 2. Start MediaMTX
+# 2. Start MediaMTX + Evolution API (WhatsApp)
 docker compose up -d
 
 # 3. Start the management API + web app (optional but recommended)
@@ -98,7 +98,8 @@ dotnet run --project src/CameraVision.Web
   groups pending events per tenant (precedence: cooldown → flood cap →
   digest; suppressed events stay in the history and ride the next digest).
   Health tuning and the capture anti-flood are system settings (SuperAdmin).
-  WhatsApp remains configuration-only.
+  Both channels are implemented: e-mail via SMTP and WhatsApp via the
+  Evolution API (thumbnail sent as image with the alert text as caption).
 - **Usuários**: admin-only user management (create, edit, deactivate, reset
   password). Tenant admins manage their own tenant; the SuperAdmin manages
   everyone and assigns tenants/roles.
@@ -197,6 +198,34 @@ To watch from another device on the LAN, make sure `webrtcAdditionalHosts` in
 8554 RTSP, 8888 HLS, 8889 WebRTC/WHEP, 8189/udp WebRTC media, 9997 API.
 The `paths: all_others:` entry accepts any published path, so no per-camera
 configuration is needed.
+
+## WhatsApp (Evolution API)
+
+The same `docker compose up -d` also starts the
+[Evolution API](https://github.com/EvolutionAPI/evolution-api) v2.3.7 — an
+**unofficial** WhatsApp gateway built on Baileys (WhatsApp Web protocol) — on
+`http://localhost:8080`, plus its required PostgreSQL and Redis containers
+(internal only, data in named Docker volumes). The global API key is set by
+`AUTHENTICATION_API_KEY` in `docker-compose.yml` (default
+`cameravision-evolution-key` — change it for anything beyond LAN use).
+
+Pairing (SuperAdmin, one number for the whole system):
+
+1. In the web app open **Sistema → WhatsApp (Evolution API)** and fill in
+   URL base `http://localhost:8080`, the API key above and an instance name
+   (e.g. `cameravision`), then **Salvar**.
+2. Click **Gerar QR Code** and scan it from the phone (WhatsApp →
+   Dispositivos conectados → Conectar dispositivo). The page polls the
+   connection state and refreshes the QR every 40 s until it shows
+   **Conectado**.
+3. Add recipient numbers (`+5549999999999`) in **Alertas → WhatsApp**, enable
+   the channel, and tick *WhatsApp* on the capture rules / health alerts that
+   should use it.
+
+The session survives container restarts (`DEL_INSTANCE=false`, instance state
+in Postgres). Because this is not the official WhatsApp Business API, use a
+dedicated number — numbers sending automated messages this way can be banned
+by WhatsApp.
 
 ## GPU notes
 

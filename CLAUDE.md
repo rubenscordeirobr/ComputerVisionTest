@@ -10,7 +10,7 @@ Multi-camera computer-vision prototype: connects to RTSP cameras, runs YOLO26n d
 
 ```powershell
 .\scripts\download-model.ps1          # one-time: export ./models/yolo26n.onnx
-docker compose up -d                  # start MediaMTX
+docker compose up -d                  # start MediaMTX + Evolution API (WhatsApp)
 dotnet run --project src/CameraVision.Api             # processor API + media streaming → http://localhost:5220
 dotnet run --project src/CameraVision.Web             # management web app → http://localhost:5210
 dotnet run --project src/CameraVision.DetectionWorker # detection worker (from repo root)
@@ -28,7 +28,9 @@ Solution `ComputerVisionTest.slnx` (central package management via
   (no dependencies).
 - `src/CameraVision.Infrastructure` — EF Core + SQLite (`data/database.db`, WAL,
   migrations auto-applied), repositories, capture importer, rule-based alert
-  dispatcher + channels (MailKit email, WhatsApp stub), Evolution API client.
+  dispatcher + channels (MailKit email, WhatsApp via Evolution API), Evolution
+  API client (QR pairing + sendText/sendMedia; the dockerized Evolution API is
+  the unofficial Baileys-based WhatsApp gateway).
 - `src/CameraVision.Api` — minimal API (port 5220): worker endpoints
   (`X-Api-Key`) for cameras/capture-rules/status/capture-ingest, and the media
   streaming service (`/media`, authorized by the web app's cookie via a shared
