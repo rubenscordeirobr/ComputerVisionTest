@@ -103,3 +103,16 @@ the class; `maxSegmentSeconds`/`lingerSeconds` = **max** over enabled rules.
   the capture's `StartedAt` falls inside the matching rule's window. Rule
   dialog gains an "Somente em determinado horário" toggle + time pickers; the
   table shows the window or "Sempre".
+- 2026-08-30 — **Per-tenant antiflood + capture alert log**:
+  `CaptureAlertSettings` stops being a system singleton — one row per tenant
+  (unique `TenantId`, `LastDigestAt` tracked per tenant; migration
+  `TenantCaptureAlerts` hands the old global row to the first tenant). The
+  Regras de Captura antiflood panel is now visible to tenant users
+  (SuperAdmin picks the tenant in a selector). Every delivery attempt is
+  recorded in `CaptureAlertLogs` (`CaptureId`, `CaptureRuleId`, `SentAt`,
+  `Channel`, `Status` Success/Fail, `ErrorMessage` — also written when a
+  channel is disabled or has no recipients, so silent drops are visible).
+  `Capture.AlertRuleId` stores the first matching rule at queue time so the
+  grouped digest can attribute its log rows. Capturas page: new "Alertas"
+  icon per row opens a dialog listing the attempts (channel, rule, status,
+  error) plus an "in queue" notice while a capture waits for the digest.

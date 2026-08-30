@@ -115,7 +115,7 @@ deactivated tenant ("Cliente desativado.").
 | --- | --- | --- |
 | `SystemSettings` (SMTP, Evolution, public URL) | system singleton | SuperAdmin |
 | `HealthAlertSettings` (thresholds, cooldown, flood cap, digest) | system singleton | SuperAdmin |
-| `CaptureAlertSettings` (grouping window) | system singleton | SuperAdmin |
+| `CaptureAlertSettings` (grouping window) | **per tenant** (unique TenantId) | any tenant user (SuperAdmin via tenant selector) |
 | `AlertSettings` (channel on/off + recipients) | **per tenant** (unique TenantId+Channel) | tenant Admin (SuperAdmin via tenant selector) |
 | `CaptureRule` | **per tenant** | tenant Admin |
 
@@ -123,9 +123,11 @@ deactivated tenant ("Cliente desativado.").
 
 - `AlertDispatcher` groups fresh captures by `TenantId`; each group is matched
   against **that tenant's** enabled rules and sent to **that tenant's**
-  recipients. The grouping switch/window stays global.
+  recipients using **that tenant's** grouping switch/window (2026-08-30 — was
+  global before).
 - `CaptureAlertDigestHostedService` groups pending captures by tenant and
-  sends one summary per tenant per window.
+  sends one summary per tenant per that tenant's window (`LastDigestAt` is
+  tracked per tenant).
 - `CameraHealthAlertService` stamps events with the camera's tenant and sends
   individual health alerts to that tenant's recipients;
   `HealthDigestHostedService` builds one digest per tenant. Debounce/cooldown/
