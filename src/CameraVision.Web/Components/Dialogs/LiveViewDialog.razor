@@ -1,0 +1,78 @@
+@implements IAsyncDisposable
+@inject IJSRuntime Js
+
+<MudDialog>
+    <DialogContent>
+        <div class="d-flex align-center mb-2" style="gap: 8px;">
+            <MudChip T="string" Size="Size.Small" Color="@_statusColor" Variant="Variant.Filled">@_statusLabel</MudChip>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Stream anotado pelo detector (annotated/@Camera.Name)
+            </MudText>
+        </div>
+        <video @ref="_video" autoplay muted playsinline controls
+               style="width: 100%; max-height: 70vh; aspect-ratio: 16/9; background: #000;">
+            Seu navegador não suporta a reprodução deste vídeo.
+        </video>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="Close">Fechar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Camera Camera { get; set; } = default!;
+
+    private ElementReference _video;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _player;
+    private DotNetObjectReference<LiveViewDialog>? _selfRef;
+    private string _statusLabel = "Conectando…";
+    private Color _statusColor = Color.Default;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        _selfRef = DotNetObjectReference.Create(this);
+        _module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/live-player.js");
+        _player = await _module.InvokeAsync<IJSObjectReference>(
+            "start", _video, _selfRef, $"annotated/{Camera.Name}", null, null);
+    }
+
+    [JSInvokable]
+    public void SetStatus(string kind)
+    {
+        (_statusLabel, _statusColor) = kind switch
+        {
+            "webrtc" => ("Ao vivo (WebRTC)", Color.Success),
+            "hls" => ("Ao vivo (HLS)", Color.Success),
+            "offline" => ("Sem sinal — o processador está publicando?", Color.Error),
+            _ => ("Conectando…", Color.Default),
+        };
+        StateHasChanged();
+    }
+
+    private void Close() => MudDialog.Close();
+
+    public async ValueTask DisposeAsync()
+    {
+        _selfRef?.Dispose();
+        try
+        {
+            if (_player != null)
+            {
+                await _player.InvokeVoidAsync("stop");
+                await _player.DisposeAsync();
+            }
+            if (_module != null)
+                await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

@@ -75,6 +75,9 @@
                 }
             </MudTd>
             <MudTd Style="text-align:right; white-space: nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" Color="Color.Primary"
+                               Disabled="@(!CanWatchLive(context))"
+                               OnClick="@(() => WatchLiveAsync(context))" aria-label="Ver ao vivo" />
                 <MudIconButton Icon="@Icons.Material.Filled.History" Size="Size.Small"
                                OnClick="@(() => ShowHistoryAsync(context))" aria-label="Histórico de saúde" />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
@@ -219,6 +222,17 @@
         var dialog = await DialogService.ShowAsync<CameraDialog>("Editar câmera", parameters, DialogOpts);
         if ((await dialog.Result) is { Canceled: false })
             await LoadAsync();
+    }
+
+    private static bool CanWatchLive(Camera camera) =>
+        camera.Enabled && !string.IsNullOrWhiteSpace(camera.StreamUrl);
+
+    private async Task WatchLiveAsync(Camera camera)
+    {
+        var parameters = new DialogParameters<LiveViewDialog> { { d => d.Camera, camera } };
+        await DialogService.ShowAsync<LiveViewDialog>(
+            $"Ao vivo — {camera.Name}", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true });
     }
 
     private async Task ShowHistoryAsync(Camera camera)
