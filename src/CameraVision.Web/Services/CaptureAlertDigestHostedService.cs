@@ -7,15 +7,17 @@ using CameraVision.Core.Repositories;
 namespace CameraVision.Web.Services;
 
 /// <summary>
-/// Antiflood for capture alerts: sends at most one grouped summary per configured
-/// window (per channel) covering every capture the dispatcher queued
+/// Antiflood for capture alerts: sends at most one grouped summary per tenant per
+/// configured window (per channel) covering every capture the dispatcher queued
 /// (AlertQueuedAt set, AlertSentAt null). Runs only in the web app; the API just
 /// queues. A burst of detections becomes a single PT-BR e-mail with one tokenized
-/// playback link per capture.
+/// playback link per capture. Every delivery attempt is recorded as a
+/// CaptureAlertLog row per capture.
 /// </summary>
 public sealed class CaptureAlertDigestHostedService(
     ISettingsRepository settingsRepository,
     ICaptureRepository captures,
+    ICaptureAlertLogRepository alertLogRepository,
     IEnumerable<IAlertChannel> channels,
     CaptureLinkService captureLinks,
     StoragePaths storage,
@@ -54,14 +56,6 @@ public sealed class CaptureAlertDigestHostedService(
         if (pending.Count == 0)
             return;
 
-        var settings = await settingsRepository.GetCaptureAlertSettingsAsync(ct);
-        var now = DateTime.Now;
-        var window = TimeSpan.FromMinutes(Math.Max(1, settings.GroupWindowMinutes));
-        // With grouping later disabled, leftovers still flush as one final summary.
-        if (settings.GroupingEnabled &&
-            settings.LastDigestAt != null && now - settings.LastDigestAt < window)
-            return;
-
         var system = await settingsRepository.GetSystemSettingsAsync(ct);
         var baseUrl = system.PublicBaseUrl.Trim().TrimEnd('/');
         if (baseUrl.Length == 0)
@@ -69,39 +63,89 @@ public sealed class CaptureAlertDigestHostedService(
         if (baseUrl.Length == 0)
             baseUrl = "http://localhost:5210";
 
-        // One summary per tenant per channel — recipients are tenant-scoped (SPEC-14).
+        // One summary per tenant per channel — recipients and the antiflood
+        // window are tenant-scoped (SPEC-14), so each tenant flushes on its own.
         foreach (var tenantCaptures in pending.GroupBy(c => c.TenantId))
+            await DigestTenantAsync(tenantCaptures.Key, [.. tenantCaptures], system, baseUrl, ct);
+    }
+
+    private async Task DigestTenantAsync(int tenantId, IReadOnlyList<Capture> items,
+        SystemSettings system, string baseUrl, CancellationToken ct)
+    {
+        var settings = await settingsRepository.GetCaptureAlertSettingsAsync(tenantId, ct);
+        var now = DateTime.Now;
+        var window = TimeSpan.FromMinutes(Math.Max(1, settings.GroupWindowMinutes));
+        // With grouping later disabled, leftovers still flush as one final summary.
+        if (settings.GroupingEnabled &&
+            settings.LastDigestAt != null && now - settings.LastDigestAt < window)
+            return;
+
+        var logs = new List<CaptureAlertLog>();
+        foreach (var channel in channels)
         {
-            foreach (var channel in channels)
+            var channelItems = items
+                .Where(c => (c.AlertChannels ?? "").Contains(channel.Channel.ToString(), StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (channelItems.Count == 0)
+                continue;
+
+            var alertSettings = await settingsRepository.GetAlertSettingsAsync(tenantId, channel.Channel, ct);
+
+            string? error;
+            if (!alertSettings.Enabled || alertSettings.Recipients.Count == 0)
             {
-                var items = tenantCaptures
-                    .Where(c => (c.AlertChannels ?? "").Contains(channel.Channel.ToString(), StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-                if (items.Count == 0)
-                    continue;
-
-                var alertSettings = await settingsRepository.GetAlertSettingsAsync(
-                    tenantCaptures.Key, channel.Channel, ct);
-                if (!alertSettings.Enabled || alertSettings.Recipients.Count == 0)
-                    continue;
-
+                error = "Canal desativado ou sem destinatários configurados.";
+            }
+            else
+            {
                 try
                 {
-                    if (await channel.TrySendAsync(ComposeDigest(items, baseUrl), alertSettings, system, ct))
+                    if (await channel.TrySendAsync(ComposeDigest(channelItems, baseUrl), alertSettings, system, ct))
+                    {
+                        error = null;
                         logger.LogInformation("Grouped capture alert sent via {Channel} with {Count} capture(s).",
-                            channel.Channel, items.Count);
+                            channel.Channel, channelItems.Count);
+                    }
+                    else
+                    {
+                        error = "O canal não confirmou o envio (verifique as configurações e os destinatários).";
+                    }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
+                    error = ex.Message;
                     logger.LogError(ex, "Grouped capture alert via {Channel} failed.", channel.Channel);
                 }
             }
+
+            // AlertRuleId is null only for captures queued before the column
+            // existed or whose rule was deleted — those cannot be attributed.
+            logs.AddRange(channelItems
+                .Where(c => c.AlertRuleId != null)
+                .Select(c => new CaptureAlertLog
+                {
+                    CaptureId = c.Id,
+                    CaptureRuleId = c.AlertRuleId!.Value,
+                    SentAt = now,
+                    Channel = channel.Channel,
+                    Status = error == null ? CaptureAlertStatus.Success : CaptureAlertStatus.Fail,
+                    ErrorMessage = error,
+                }));
         }
 
         // Marked regardless of channel outcome so a broken SMTP never loops the same batch.
-        await captures.MarkAlertsSentAsync(pending.Select(c => c.Id), now, ct);
+        await captures.MarkAlertsSentAsync(items.Select(c => c.Id), now, ct);
         settings.LastDigestAt = now;
         await settingsRepository.SaveCaptureAlertSettingsAsync(settings, ct);
+
+        try
+        {
+            await alertLogRepository.AddRangeAsync(logs, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to persist {Count} capture alert log row(s).", logs.Count);
+        }
     }
 
     private AlertMessage ComposeDigest(IReadOnlyList<Capture> items, string baseUrl)

@@ -18,6 +18,7 @@ public sealed class AlertDispatcher(
     IEnumerable<IAlertChannel> channels,
     ICaptureRuleRepository ruleRepository,
     ICaptureRepository captureRepository,
+    ICaptureAlertLogRepository alertLogRepository,
     ISettingsRepository settingsRepository,
     CaptureLinkService captureLinks,
     StoragePaths storage,
@@ -62,23 +63,23 @@ public sealed class AlertDispatcher(
             logger.LogWarning("Public base URL not configured — alert links default to {Url}.", baseUrl);
         }
 
-        var grouping = await settingsRepository.GetCaptureAlertSettingsAsync(ct);
-
-        // Rules and recipients are tenant-scoped: a capture only matches its own
-        // tenant's rules and only notifies that tenant's recipients (SPEC-14).
+        // Rules, recipients and antiflood grouping are tenant-scoped: a capture
+        // only matches its own tenant's rules and settings (SPEC-14).
         foreach (var tenantCaptures in recent.GroupBy(c => c.TenantId))
         {
             await DispatchTenantAsync(tenantCaptures.Key, [.. tenantCaptures],
-                grouping, system, baseUrl, ct);
+                system, baseUrl, ct);
         }
     }
 
     private async Task DispatchTenantAsync(int tenantId, IReadOnlyList<Capture> tenantCaptures,
-        CaptureAlertSettings grouping, SystemSettings system, string baseUrl, CancellationToken ct)
+        SystemSettings system, string baseUrl, CancellationToken ct)
     {
         var rules = await ruleRepository.GetEnabledAsync(tenantId, ct);
         if (rules.Count == 0)
             return;
+
+        var grouping = await settingsRepository.GetCaptureAlertSettingsAsync(tenantId, ct);
 
         var channelSettings = new Dictionary<AlertChannel, AlertSettings>();
         foreach (var channel in channels)
@@ -93,17 +94,23 @@ public sealed class AlertDispatcher(
             if (matching.Count == 0)
                 continue;
 
-            var wanted = new HashSet<AlertChannel>();
-            if (matching.Any(r => r.NotifyEmail))
-                wanted.Add(AlertChannel.Email);
-            if (matching.Any(r => r.NotifyWhatsApp))
-                wanted.Add(AlertChannel.WhatsApp);
-            if (wanted.Count == 0)
+            // First rule that requested each channel, for alert-log attribution.
+            var ruleByChannel = new Dictionary<AlertChannel, CaptureRule>();
+            foreach (var rule in matching)
+            {
+                if (rule.NotifyEmail)
+                    ruleByChannel.TryAdd(AlertChannel.Email, rule);
+                if (rule.NotifyWhatsApp)
+                    ruleByChannel.TryAdd(AlertChannel.WhatsApp, rule);
+            }
+            if (ruleByChannel.Count == 0)
                 continue;
+            var wanted = ruleByChannel.Keys.ToHashSet();
 
             // Channels are resolved now so a rule's time window closing later
             // cannot drop a queued capture from the grouped summary.
             capture.AlertChannels = string.Join(",", wanted);
+            capture.AlertRuleId = matching.First(r => r.NotifyEmail || r.NotifyWhatsApp).Id;
 
             if (grouping.GroupingEnabled)
             {
@@ -118,31 +125,72 @@ public sealed class AlertDispatcher(
             }
 
             var message = ComposeCaptureMessage(capture, baseUrl);
+            var logs = new List<CaptureAlertLog>();
 
             foreach (var channel in channels)
             {
-                if (!wanted.Contains(channel.Channel))
+                if (!ruleByChannel.TryGetValue(channel.Channel, out var rule))
                     continue;
                 var settings = channelSettings[channel.Channel];
-                if (!settings.Enabled || settings.Recipients.Count == 0)
-                    continue;
 
-                try
+                string? error;
+                if (!settings.Enabled || settings.Recipients.Count == 0)
                 {
-                    if (await channel.TrySendAsync(message, settings, system, ct))
-                        logger.LogInformation(
-                            "Capture alert sent via {Channel} for capture {CaptureId} ({Class} @ {Camera}).",
-                            channel.Channel, capture.Id, capture.ObjectClass, capture.CameraName);
+                    error = "Canal desativado ou sem destinatários configurados.";
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                else
                 {
-                    logger.LogError(ex, "Capture alert via {Channel} failed for capture {CaptureId}.",
-                        channel.Channel, capture.Id);
+                    try
+                    {
+                        if (await channel.TrySendAsync(message, settings, system, ct))
+                        {
+                            error = null;
+                            logger.LogInformation(
+                                "Capture alert sent via {Channel} for capture {CaptureId} ({Class} @ {Camera}).",
+                                channel.Channel, capture.Id, capture.ObjectClass, capture.CameraName);
+                        }
+                        else
+                        {
+                            error = "O canal não confirmou o envio (verifique as configurações e os destinatários).";
+                        }
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        error = ex.Message;
+                        logger.LogError(ex, "Capture alert via {Channel} failed for capture {CaptureId}.",
+                            channel.Channel, capture.Id);
+                    }
                 }
+
+                logs.Add(new CaptureAlertLog
+                {
+                    CaptureId = capture.Id,
+                    CaptureRuleId = rule.Id,
+                    SentAt = DateTime.Now,
+                    Channel = channel.Channel,
+                    Status = error == null ? CaptureAlertStatus.Success : CaptureAlertStatus.Fail,
+                    ErrorMessage = error,
+                });
             }
 
             capture.AlertSentAt = DateTime.Now;
             await captureRepository.UpdateAsync(capture, ct);
+            await TryWriteLogsAsync(logs, ct);
+        }
+    }
+
+    /// <summary>Alert logging is best-effort: a log failure must never break dispatch.</summary>
+    private async Task TryWriteLogsAsync(IReadOnlyList<CaptureAlertLog> logs, CancellationToken ct)
+    {
+        if (logs.Count == 0)
+            return;
+        try
+        {
+            await alertLogRepository.AddRangeAsync(logs, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to persist {Count} capture alert log row(s).", logs.Count);
         }
     }
 
