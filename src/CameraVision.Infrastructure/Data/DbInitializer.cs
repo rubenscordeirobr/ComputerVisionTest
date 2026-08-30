@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CameraVision.Infrastructure.Data;
 
-/// <summary>Applies migrations and seeds the settings singletons, tenant and users on startup.</summary>
+/// <summary>Applies migrations and seeds the settings rows, tenant and users on startup.</summary>
 public static class DbInitializer
 {
     /// <summary>Absorbs data with no resolvable tenant; first login of the installation.</summary>
@@ -72,8 +72,9 @@ public static class DbInitializer
         if (!await db.HealthAlertSettings.AnyAsync(ct))
             db.Add(new HealthAlertSettings { Id = 1 });
 
-        if (!await db.CaptureAlertSettings.AnyAsync(ct))
-            db.Add(new CaptureAlertSettings { Id = 1 });
+        // Per-tenant antiflood: other tenants fall back to defaults until saved.
+        if (!await db.CaptureAlertSettings.AnyAsync(s => s.TenantId == tenant.Id, ct))
+            db.Add(new CaptureAlertSettings { TenantId = tenant.Id });
 
         foreach (var channel in new[] { AlertChannel.Email, AlertChannel.WhatsApp })
         {

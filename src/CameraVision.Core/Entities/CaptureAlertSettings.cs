@@ -1,13 +1,15 @@
 namespace CameraVision.Core.Entities;
 
 /// <summary>
-/// Singleton row (Id = 1): antiflood grouping for capture alerts. When enabled,
-/// individual capture messages are replaced by one grouped summary per window
-/// (per channel), sent by the web app's digest job.
+/// Per-tenant (one row per tenant) antiflood grouping for capture alerts. When
+/// enabled, individual capture messages are replaced by one grouped summary per
+/// window (per channel), sent by the web app's digest job.
 /// </summary>
 public class CaptureAlertSettings
 {
-    public int Id { get; set; } = 1;
+    public int Id { get; set; }
+
+    public int TenantId { get; set; }
 
     public bool GroupingEnabled { get; set; } = true;
 

@@ -43,5 +43,9 @@ public class Capture
     /// <summary>Channels resolved at rule-match time (comma-separated AlertChannel names).</summary>
     public string? AlertChannels { get; set; }
 
+    /// <summary>First rule that matched at rule-match time; nulled if that rule is deleted.
+    /// Lets the grouped digest attribute its alert-log rows to a rule.</summary>
+    public int? AlertRuleId { get; set; }
+
     public TimeSpan Duration => EndedAt - StartedAt;
 }

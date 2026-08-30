@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Capture> Captures => Set<Capture>();
     public DbSet<AlertSettings> AlertSettings => Set<AlertSettings>();
     public DbSet<CaptureAlertSettings> CaptureAlertSettings => Set<CaptureAlertSettings>();
+    public DbSet<CaptureAlertLog> CaptureAlertLogs => Set<CaptureAlertLog>();
     public DbSet<SystemSettings> SystemSettings => Set<SystemSettings>();
     public DbSet<HealthAlertSettings> HealthAlertSettings => Set<HealthAlertSettings>();
     public DbSet<CameraHealthEvent> CameraHealthEvents => Set<CameraHealthEvent>();
@@ -81,6 +82,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(c => c.CameraId)
                 .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<CaptureRule>()
+                .WithMany()
+                .HasForeignKey(c => c.AlertRuleId)
+                .OnDelete(DeleteBehavior.SetNull);
             e.HasOne<Tenant>()
                 .WithMany()
                 .HasForeignKey(c => c.TenantId)
@@ -113,7 +118,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<CaptureAlertSettings>(e =>
         {
-            e.Property(s => s.Id).ValueGeneratedNever();
+            e.HasIndex(s => s.TenantId).IsUnique();
+            e.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(s => s.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CaptureAlertLog>(e =>
+        {
+            e.Property(l => l.ErrorMessage).HasMaxLength(500);
+            e.HasIndex(l => l.CaptureId);
+            e.HasOne<Capture>()
+                .WithMany()
+                .HasForeignKey(l => l.CaptureId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<CaptureRule>()
+                .WithMany()
+                .HasForeignKey(l => l.CaptureRuleId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<CameraHealthEvent>(e =>
