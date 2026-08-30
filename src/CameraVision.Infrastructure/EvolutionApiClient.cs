@@ -10,7 +10,8 @@ namespace CameraVision.Infrastructure;
 /// <summary>
 /// Evolution API v2 pairing flow: GET /instance/connect/{name} returns the QR
 /// (creating the instance on 404), GET /instance/connectionState/{name} reports
-/// open | connecting | close.
+/// open | connecting | close. Sending uses POST /message/sendText|sendMedia/{name}
+/// (media as base64, alert text as the image caption).
 /// </summary>
 public sealed class EvolutionApiClient(
     IHttpClientFactory httpClientFactory,
@@ -95,11 +96,88 @@ public sealed class EvolutionApiClient(
         }
     }
 
-    private HttpClient CreateClient(SystemSettings settings)
+    public Task<EvolutionSendResult> SendTextAsync(SystemSettings settings, string number, string text,
+        CancellationToken ct = default) =>
+        SendAsync(settings, number, "message/sendText",
+            digits => new { number = digits, text }, TimeSpan.FromSeconds(15), ct);
+
+    public Task<EvolutionSendResult> SendImageAsync(SystemSettings settings, string number, string caption,
+        byte[] image, string fileName, CancellationToken ct = default) =>
+        SendAsync(settings, number, "message/sendMedia",
+            digits => new
+            {
+                number = digits,
+                mediatype = "image",
+                mimetype = MimeTypeFor(fileName),
+                caption,
+                fileName,
+                media = Convert.ToBase64String(image),
+            }, TimeSpan.FromSeconds(30), ct);
+
+    private async Task<EvolutionSendResult> SendAsync<TPayload>(SystemSettings settings, string number,
+        string endpoint, Func<string, TPayload> payload, TimeSpan timeout, CancellationToken ct)
+    {
+        if (Validate(settings) is { } configError)
+            return new EvolutionSendResult(false, configError);
+
+        var digits = new string(number.Where(char.IsAsciiDigit).ToArray());
+        if (digits.Length < 10)
+            return new EvolutionSendResult(false, $"Número de destino inválido: \"{number}\".");
+
+        try
+        {
+            using var client = CreateClient(settings, timeout);
+            var instance = Uri.EscapeDataString(settings.EvolutionInstanceName.Trim());
+            var response = await client.PostAsJsonAsync($"{endpoint}/{instance}", payload(digits), ct);
+            if (response.IsSuccessStatusCode)
+                return new EvolutionSendResult(true);
+
+            var detail = await ReadErrorDetailAsync(response, ct);
+            return new EvolutionSendResult(false,
+                $"A Evolution API retornou HTTP {(int)response.StatusCode}" +
+                (detail == null ? "." : $": {detail}"));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Evolution API send via {Endpoint} failed.", endpoint);
+            return new EvolutionSendResult(false, $"Falha ao contatar a Evolution API: {ex.Message}");
+        }
+    }
+
+    /// <summary>Error bodies look like { response: { message: "..." | ["..."] } }.</summary>
+    private static async Task<string?> ReadErrorDetailAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            if (json.ValueKind != JsonValueKind.Object ||
+                !json.TryGetProperty("response", out var inner) ||
+                inner.ValueKind != JsonValueKind.Object ||
+                !inner.TryGetProperty("message", out var message))
+                return null;
+            if (message.ValueKind == JsonValueKind.Array && message.GetArrayLength() > 0)
+                message = message[0];
+            return message.ValueKind == JsonValueKind.String ? message.GetString() : message.ToString();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string MimeTypeFor(string fileName) =>
+        Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            _ => "image/jpeg",
+        };
+
+    private HttpClient CreateClient(SystemSettings settings, TimeSpan? timeout = null)
     {
         var client = httpClientFactory.CreateClient("evolution-api");
         client.BaseAddress = new Uri(settings.EvolutionBaseUrl.Trim().TrimEnd('/') + "/");
-        client.Timeout = TimeSpan.FromSeconds(10);
+        client.Timeout = timeout ?? TimeSpan.FromSeconds(10);
         if (!string.IsNullOrWhiteSpace(settings.EvolutionApiKey))
             client.DefaultRequestHeaders.Add("apikey", settings.EvolutionApiKey.Trim());
         return client;

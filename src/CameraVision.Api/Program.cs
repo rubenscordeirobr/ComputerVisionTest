@@ -38,6 +38,8 @@ builder.Services.AddSingleton(new CaptureLinkOptions
 builder.Services.AddSingleton<CaptureLinkService>();
 
 // Ingested captures trigger the same rule-based alert dispatch as the web app.
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<IEvolutionApiClient, EvolutionApiClient>();
 builder.Services.AddSingleton<IAlertChannel, EmailAlertChannel>();
 builder.Services.AddSingleton<IAlertChannel, WhatsAppAlertChannel>();
 builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
