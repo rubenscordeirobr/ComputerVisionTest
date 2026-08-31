@@ -12,9 +12,10 @@ services:
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
 
-  # HTTPS reverse proxy for cameras.vemlogo.com on port 8443 (80/443 belong to
-  # other services on this host). Certificate via Porkbun DNS-01 — put the API
-  # credentials in ./.env (PORKBUN_API_KEY / PORKBUN_API_SECRET, gitignored).
+  # HTTPS reverse proxy for the *.vemlogo.com sites, all sharing port 8443
+  # (80/443 belong to other services on this host). Certificates via Porkbun
+  # DNS-01 — put the API credentials in ./.env (PORKBUN_API_KEY /
+  # PORKBUN_API_SECRET, gitignored).
   caddy:
     build: ./caddy
     container_name: caddy
@@ -27,6 +28,7 @@ services:
       - PORKBUN_API_SECRET=${PORKBUN_API_SECRET:-}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./client:/srv/client:ro    # served at view-camera.vemlogo.com
       - caddy_data:/data
       - caddy_config:/config
 

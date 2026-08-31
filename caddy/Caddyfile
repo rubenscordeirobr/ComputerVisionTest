@@ -1,27 +1,23 @@
 # HTTPS front for the CameraVision apps on port 8443 (80/443 are taken by
-# other services on this host). The certificate comes from Let's Encrypt via
+# other services on this host). All sites share the single 8443 port —
+# routing is by SNI/Host header. Certificates come from Let's Encrypt via
 # the Porkbun DNS-01 challenge — no inbound port is needed for issuance.
 {
 	email admin@vemlogo.com
 }
 
-cameras.vemlogo.com:8443 {
-	encode gzip
-
+(porkbun_tls) {
 	tls {
 		dns porkbun {
 			api_key {env.PORKBUN_API_KEY}
 			api_secret_key {env.PORKBUN_API_SECRET}
 		}
 	}
+}
 
-	# The API serves the media files; everything else is the web app.
-	handle /media/* {
-		reverse_proxy host.docker.internal:5220
-	}
-
-	# Live annotated streams from MediaMTX: WebRTC signaling (WHEP) and HLS.
-	# The media itself flows over WebRTC's own UDP port (8189), not through here.
+# Live annotated streams from MediaMTX: WebRTC signaling (WHEP) and HLS.
+# The media itself flows over WebRTC's own UDP port (8189), not through here.
+(mediamtx_streams) {
 	handle_path /webrtc/* {
 		reverse_proxy mediamtx:8889
 	}
@@ -29,8 +25,43 @@ cameras.vemlogo.com:8443 {
 	handle_path /hls/* {
 		reverse_proxy mediamtx:8888
 	}
+}
+
+# Combined site: web app + media + streams under one host.
+cameras.vemlogo.com:8443 {
+	import porkbun_tls
+	encode gzip
+	import mediamtx_streams
+
+	# The API serves the media files; everything else is the web app.
+	handle /media/* {
+		reverse_proxy host.docker.internal:5220
+	}
 
 	handle {
 		reverse_proxy host.docker.internal:5210
 	}
+}
+
+# Processor API (worker endpoints + media streaming).
+api-camera.vemlogo.com:8443 {
+	import porkbun_tls
+	reverse_proxy host.docker.internal:5220
+}
+
+# Management web app (Blazor Server).
+web-camera.vemlogo.com:8443 {
+	import porkbun_tls
+	encode gzip
+	import mediamtx_streams
+	reverse_proxy host.docker.internal:5210
+}
+
+# Standalone stream viewer (client/index.html, mounted at /srv/client).
+view-camera.vemlogo.com:8443 {
+	import porkbun_tls
+	encode gzip
+	import mediamtx_streams
+	root * /srv/client
+	file_server
 }
