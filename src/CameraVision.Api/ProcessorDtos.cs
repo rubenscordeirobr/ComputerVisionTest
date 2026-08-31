@@ -16,6 +16,8 @@ public sealed record CaptureRulesDto(
 
 public sealed record CameraStatusDto(string Status, string? Detail);
 
+public sealed record WorkerHeartbeatDto(DateTime? StartedAt, string? Device, int ActiveCameras);
+
 public sealed record CaptureIngestDto(
     int? CameraId,
     string CameraName,

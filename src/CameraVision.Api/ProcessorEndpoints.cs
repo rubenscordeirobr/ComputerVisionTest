@@ -53,6 +53,19 @@ public static class ProcessorEndpoints
                 return Results.NoContent();
             });
 
+        group.MapPost("/heartbeat",
+            async (WorkerHeartbeatDto dto, IWorkerStatusRepository workerStatus, CancellationToken ct) =>
+            {
+                await workerStatus.SaveHeartbeatAsync(new WorkerStatus
+                {
+                    LastHeartbeatAt = DateTime.Now,
+                    StartedAt = dto.StartedAt,
+                    Device = dto.Device,
+                    ActiveCameras = dto.ActiveCameras,
+                }, ct);
+                return Results.NoContent();
+            });
+
         group.MapPost("/captures", IngestCaptureAsync);
     }
 
