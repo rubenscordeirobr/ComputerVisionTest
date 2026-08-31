@@ -34,6 +34,16 @@ const cameras = (params.get("cams") || DEFAULT_CAMERAS.join(",")).split(",").map
 const host    = params.get("host") || location.hostname || "localhost";
 const WEBRTC_PORT = 8889, HLS_PORT = 8888;
 
+// Served over HTTPS (behind the Caddy proxy) MediaMTX is reachable at the
+// same-origin /webrtc/* and /hls/* paths; over plain HTTP (local file or dev)
+// it is reached directly on its own ports. Mirrors wwwroot/js/live-player.js.
+const WEBRTC_BASE = location.protocol === "https:"
+  ? `${location.origin}/webrtc`
+  : `http://${host}:${WEBRTC_PORT}`;
+const HLS_BASE = location.protocol === "https:"
+  ? `${location.origin}/hls`
+  : `http://${host}:${HLS_PORT}`;
+
 const grid = document.getElementById("grid");
 for (const name of cameras) {
   const card = document.createElement("div");
@@ -85,7 +95,7 @@ async function playWebrtc(name, video) {
   await pc.setLocalDescription(await pc.createOffer());
   await waitForIceGathering(pc);
 
-  const res = await fetch(`http://${host}:${WEBRTC_PORT}/annotated/${name}/whep`, {
+  const res = await fetch(`${WEBRTC_BASE}/annotated/${name}/whep`, {
     method: "POST",
     headers: { "Content-Type": "application/sdp" },
     body: pc.localDescription.sdp,
@@ -115,7 +125,7 @@ function waitForIceGathering(pc) {
 
 // --- HLS fallback (a few seconds of latency) ---
 function playHls(name, video) {
-  const url = `http://${host}:${HLS_PORT}/annotated/${name}/index.m3u8`;
+  const url = `${HLS_BASE}/annotated/${name}/index.m3u8`;
   return new Promise(async (resolve, reject) => {
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = url;
