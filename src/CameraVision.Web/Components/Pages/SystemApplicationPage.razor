@@ -1,0 +1,32 @@
+@page "/system/application"
+@attribute [Authorize(Policy = "SuperAdmin")]
+@inject ISettingsRepository SettingsRepo
+@inject ISnackbar Snackbar
+
+<PageTitle>Sistema · Aplicação — CameraVision</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Aplicação</MudText>
+
+<MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
+    <MudTextField T="string" @bind-Value="_settings.PublicBaseUrl" Label="URL pública"
+                  Placeholder="https://cameras.exemplo.com:8443"
+                  Validation="@(new Func<string, string?>(SettingsValidation.OptionalUrl))"
+                  HelperText="Usada para montar os links de reprodução nos e-mails de alerta." />
+    <div class="d-flex justify-end mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Salvar</MudButton>
+    </div>
+</MudPaper>
+
+@code {
+    private SystemSettings _settings = new();
+
+    protected override async Task OnInitializedAsync() =>
+        _settings = await SettingsRepo.GetSystemSettingsAsync();
+
+    private async Task SaveAsync()
+    {
+        await SettingsRepo.SaveSystemSettingsAsync(_settings);
+        Snackbar.Add("Configurações salvas.", Severity.Success);
+    }
+}

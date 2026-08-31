@@ -1,0 +1,70 @@
+@page "/system/smtp"
+@page "/system-settings"
+@attribute [Authorize(Policy = "SuperAdmin")]
+@inject ISettingsRepository SettingsRepo
+@inject ISnackbar Snackbar
+
+<PageTitle>Sistema · E-mail (SMTP) — CameraVision</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">E-mail (SMTP)</MudText>
+
+<MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Servidor usado para enviar os e-mails de alerta (capturas, saúde das câmeras e alertas do sistema).
+    </MudText>
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="8">
+            <MudTextField T="string" @bind-Value="_settings.SmtpHost" Label="Servidor" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudNumericField T="int" @bind-Value="_settings.SmtpPort" Label="Porta" Min="1" Max="65535" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudTextField T="string" @bind-Value="_settings.SmtpUsername" Label="Usuário" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudTextField T="string" @bind-Value="_settings.SmtpPassword" Label="Senha"
+                          InputType="@(_showSmtpPassword ? InputType.Text : InputType.Password)"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@(_showSmtpPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                          OnAdornmentClick="@(() => _showSmtpPassword = !_showSmtpPassword)" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudTextField T="string" @bind-Value="_settings.SmtpSenderEmail" Label="E-mail do remetente"
+                          Validation="@(new Func<string, string?>(SettingsValidation.OptionalEmail))" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudTextField T="string" @bind-Value="_settings.SmtpSenderName" Label="Nome do remetente" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudSelect T="SmtpSecurity" @bind-Value="_settings.SmtpSecurity" Label="Segurança"
+                       AnchorOrigin="Origin.BottomCenter">
+                <MudSelectItem T="SmtpSecurity" Value="SmtpSecurity.None">Nenhuma</MudSelectItem>
+                <MudSelectItem T="SmtpSecurity" Value="SmtpSecurity.StartTls">STARTTLS</MudSelectItem>
+                <MudSelectItem T="SmtpSecurity" Value="SmtpSecurity.SslTls">SSL/TLS</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+    <div class="d-flex justify-end mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Salvar</MudButton>
+    </div>
+</MudPaper>
+
+<MudText Typo="Typo.caption" Class="mud-text-secondary">
+    As credenciais são armazenadas localmente sem criptografia (v1, uso em rede local).
+</MudText>
+
+@code {
+    private SystemSettings _settings = new();
+    private bool _showSmtpPassword;
+
+    protected override async Task OnInitializedAsync() =>
+        _settings = await SettingsRepo.GetSystemSettingsAsync();
+
+    private async Task SaveAsync()
+    {
+        await SettingsRepo.SaveSystemSettingsAsync(_settings);
+        Snackbar.Add("Configurações salvas.", Severity.Success);
+    }
+}

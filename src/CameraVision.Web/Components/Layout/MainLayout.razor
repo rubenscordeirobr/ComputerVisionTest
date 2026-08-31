@@ -38,7 +38,12 @@
             </AuthorizeView>
             <AuthorizeView Policy="SuperAdmin">
                 <MudNavLink Href="/tenants" Icon="@Icons.Material.Filled.Business">Clientes</MudNavLink>
-                <MudNavLink Href="/system-settings" Icon="@Icons.Material.Filled.Settings">Sistema</MudNavLink>
+                <MudNavGroup Title="Sistema" Icon="@Icons.Material.Filled.Settings" Expanded="true">
+                    <MudNavLink Href="/system/smtp" Icon="@Icons.Material.Filled.Email">E-mail (SMTP)</MudNavLink>
+                    <MudNavLink Href="/system/application" Icon="@Icons.Material.Filled.Language">Aplicação</MudNavLink>
+                    <MudNavLink Href="/system/whatsapp" Icon="@Icons.Material.Filled.Chat">WhatsApp</MudNavLink>
+                    <MudNavLink Href="/system/alerts" Icon="@Icons.Material.Filled.NotificationImportant">Alertas do sistema</MudNavLink>
+                </MudNavGroup>
             </AuthorizeView>
         </MudNavMenu>
     </MudDrawer>

@@ -1,4 +1,4 @@
-@page "/system-settings"
+@page "/system/whatsapp"
 @attribute [Authorize(Policy = "SuperAdmin")]
 @using CameraVision.Web.Components.Dialogs
 @implements IDisposable
@@ -7,70 +7,16 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<PageTitle>Sistema — CameraVision</PageTitle>
+<PageTitle>Sistema · WhatsApp — CameraVision</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Sistema</MudText>
-
-<MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
-    <MudText Typo="Typo.h6" Class="mb-3">E-mail (SMTP)</MudText>
-    <MudGrid Spacing="2">
-        <MudItem xs="12" sm="8">
-            <MudTextField T="string" @bind-Value="_settings.SmtpHost" Label="Servidor" />
-        </MudItem>
-        <MudItem xs="12" sm="4">
-            <MudNumericField T="int" @bind-Value="_settings.SmtpPort" Label="Porta" Min="1" Max="65535" />
-        </MudItem>
-        <MudItem xs="12" sm="6">
-            <MudTextField T="string" @bind-Value="_settings.SmtpUsername" Label="Usuário" />
-        </MudItem>
-        <MudItem xs="12" sm="6">
-            <MudTextField T="string" @bind-Value="_settings.SmtpPassword" Label="Senha"
-                          InputType="@(_showSmtpPassword ? InputType.Text : InputType.Password)"
-                          Adornment="Adornment.End"
-                          AdornmentIcon="@(_showSmtpPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
-                          OnAdornmentClick="@(() => _showSmtpPassword = !_showSmtpPassword)" />
-        </MudItem>
-        <MudItem xs="12" sm="6">
-            <MudTextField T="string" @bind-Value="_settings.SmtpSenderEmail" Label="E-mail do remetente"
-                          Validation="@(new Func<string, string?>(ValidateOptionalEmail))" />
-        </MudItem>
-        <MudItem xs="12" sm="6">
-            <MudTextField T="string" @bind-Value="_settings.SmtpSenderName" Label="Nome do remetente" />
-        </MudItem>
-        <MudItem xs="12" sm="6">
-            <MudSelect T="SmtpSecurity" @bind-Value="_settings.SmtpSecurity" Label="Segurança"
-                       AnchorOrigin="Origin.BottomCenter">
-                <MudSelectItem T="SmtpSecurity" Value="SmtpSecurity.None">Nenhuma</MudSelectItem>
-                <MudSelectItem T="SmtpSecurity" Value="SmtpSecurity.StartTls">STARTTLS</MudSelectItem>
-                <MudSelectItem T="SmtpSecurity" Value="SmtpSecurity.SslTls">SSL/TLS</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-    </MudGrid>
-    <div class="d-flex justify-end mt-4">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Salvar</MudButton>
-    </div>
-</MudPaper>
+<MudText Typo="Typo.h4" Class="mb-4">WhatsApp (Evolution API)</MudText>
 
 <MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
-    <MudText Typo="Typo.h6" Class="mb-3">Aplicação</MudText>
-    <MudTextField T="string" @bind-Value="_settings.PublicBaseUrl" Label="URL pública"
-                  Placeholder="http://192.168.3.2:5210"
-                  Validation="@(new Func<string, string?>(ValidateOptionalUrl))"
-                  HelperText="Usada para montar os links de reprodução nos e-mails de alerta." />
-    <div class="d-flex justify-end mt-4">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Salvar</MudButton>
-    </div>
-</MudPaper>
-
-<MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
-    <MudText Typo="Typo.h6" Class="mb-3">WhatsApp (Evolution API)</MudText>
     <MudGrid Spacing="2">
         <MudItem xs="12" sm="6">
             <MudTextField T="string" @bind-Value="_settings.EvolutionBaseUrl" Label="URL base"
                           Placeholder="http://localhost:8080"
-                          Validation="@(new Func<string, string?>(ValidateOptionalUrl))" />
+                          Validation="@(new Func<string, string?>(SettingsValidation.OptionalUrl))" />
         </MudItem>
         <MudItem xs="12" sm="6">
             <MudTextField T="string" @bind-Value="_settings.EvolutionApiKey" Label="API Key"
@@ -149,7 +95,6 @@
 
 @code {
     private SystemSettings _settings = new();
-    private bool _showSmtpPassword;
     private bool _showApiKey;
 
     private EvolutionQr? _qr;
@@ -194,17 +139,6 @@
         await SettingsRepo.SaveSystemSettingsAsync(_settings);
         Snackbar.Add("Configurações salvas.", Severity.Success);
     }
-
-    private string? ValidateOptionalEmail(string value) =>
-        string.IsNullOrWhiteSpace(value) || System.Net.Mail.MailAddress.TryCreate(value, out _)
-            ? null
-            : "E-mail inválido.";
-
-    private string? ValidateOptionalUrl(string value) =>
-        string.IsNullOrWhiteSpace(value) ||
-        (Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
-            ? null
-            : "URL inválida. Use http:// ou https://.";
 
     private Task OpenTestDialogAsync()
     {
