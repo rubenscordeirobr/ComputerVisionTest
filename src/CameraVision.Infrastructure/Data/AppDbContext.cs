@@ -17,7 +17,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<CaptureAlertLog> CaptureAlertLogs => Set<CaptureAlertLog>();
     public DbSet<SystemSettings> SystemSettings => Set<SystemSettings>();
     public DbSet<HealthAlertSettings> HealthAlertSettings => Set<HealthAlertSettings>();
+    public DbSet<AdminAlertSettings> AdminAlertSettings => Set<AdminAlertSettings>();
     public DbSet<CameraHealthEvent> CameraHealthEvents => Set<CameraHealthEvent>();
+    public DbSet<SystemAlertEvent> SystemAlertEvents => Set<SystemAlertEvent>();
+    public DbSet<WorkerStatus> WorkerStatus => Set<WorkerStatus>();
     public DbSet<AppUser> Users => Set<AppUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -114,6 +117,30 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<HealthAlertSettings>(e =>
         {
             e.Property(s => s.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<AdminAlertSettings>(e =>
+        {
+            e.Property(s => s.Id).ValueGeneratedNever();
+            e.Property(s => s.Emails)
+                .HasConversion(stringListConverter)
+                .Metadata.SetValueComparer(stringListComparer);
+            e.Property(s => s.WhatsAppNumbers)
+                .HasConversion(stringListConverter)
+                .Metadata.SetValueComparer(stringListComparer);
+        });
+
+        modelBuilder.Entity<SystemAlertEvent>(e =>
+        {
+            e.Property(s => s.Type).HasConversion<string>().HasMaxLength(30);
+            e.Property(s => s.Detail).HasMaxLength(300);
+            e.HasIndex(s => s.OccurredAt);
+        });
+
+        modelBuilder.Entity<WorkerStatus>(e =>
+        {
+            e.Property(s => s.Id).ValueGeneratedNever();
+            e.Property(s => s.Device).HasMaxLength(200);
         });
 
         modelBuilder.Entity<CaptureAlertSettings>(e =>

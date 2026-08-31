@@ -51,6 +51,25 @@ public class SettingsRepository(IDbContextFactory<AppDbContext> factory) : ISett
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task<AdminAlertSettings> GetAdminAlertSettingsAsync(CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.AdminAlertSettings.AsNoTracking().FirstOrDefaultAsync(ct)
+               ?? new AdminAlertSettings { Id = 1 };
+    }
+
+    public async Task SaveAdminAlertSettingsAsync(AdminAlertSettings settings, CancellationToken ct = default)
+    {
+        settings.Id = 1;
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var existing = await db.AdminAlertSettings.FirstOrDefaultAsync(ct);
+        if (existing == null)
+            db.Add(settings);
+        else
+            db.Entry(existing).CurrentValues.SetValues(settings);
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task<CaptureAlertSettings> GetCaptureAlertSettingsAsync(int tenantId, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
