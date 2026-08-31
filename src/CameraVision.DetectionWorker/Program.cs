@@ -152,12 +152,48 @@ Console.CancelKeyPress += (_, e) =>
     }
 };
 
+// Global heartbeat so the web app can tell "worker running" apart from "worker
+// stopped" even while every camera is reconnecting. Same cadence as the
+// per-camera status reports.
+var heartbeat = Task.CompletedTask;
+if (api != null)
+{
+    var startedAt = DateTime.Now;
+    var heartbeatApi = api;
+    heartbeat = Task.Run(async () =>
+    {
+        var interval = TimeSpan.FromSeconds(Math.Max(10, config.Api.StatusIntervalSeconds));
+        using var timer = new PeriodicTimer(interval);
+        try
+        {
+            do
+            {
+                try
+                {
+                    await heartbeatApi.PostHeartbeatAsync(startedAt, engine.DeviceDescription,
+                        enabledCameras.Count, cts.Token);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    Log.Warn("heartbeat", $"Heartbeat failed: {ex.Message}");
+                }
+            }
+            while (await timer.WaitForNextTickAsync(cts.Token));
+        }
+        catch (OperationCanceledException)
+        {
+            // shutdown
+        }
+    });
+}
+
 var pipelines = enabledCameras
     .Select(camera => new CameraPipeline(camera, config, engine, api).RunAsync(cts.Token))
     .ToArray();
 
 Log.Info("startup", $"Started {pipelines.Length} camera pipeline(s). Press Ctrl+C to stop.");
 await Task.WhenAll(pipelines);
+await heartbeat;
 
 engine.Dispose();
 api?.Dispose();

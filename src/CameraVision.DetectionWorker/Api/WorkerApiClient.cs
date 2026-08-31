@@ -64,6 +64,14 @@ public sealed class WorkerApiClient : IDisposable
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task PostHeartbeatAsync(DateTime startedAt, string? device, int activeCameras,
+        CancellationToken ct = default)
+    {
+        using var response = await _http.PostAsJsonAsync(
+            "api/processor/heartbeat", new { startedAt, device, activeCameras }, JsonOpts, ct);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task PostCaptureAsync(ApiCaptureUpload capture, byte[]? thumbnailJpeg,
         CancellationToken ct = default)
     {
