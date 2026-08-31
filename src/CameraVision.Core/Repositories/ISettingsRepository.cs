@@ -15,6 +15,9 @@ public interface ISettingsRepository
     Task<HealthAlertSettings> GetHealthAlertSettingsAsync(CancellationToken ct = default);
     Task SaveHealthAlertSettingsAsync(HealthAlertSettings settings, CancellationToken ct = default);
 
+    Task<AdminAlertSettings> GetAdminAlertSettingsAsync(CancellationToken ct = default);
+    Task SaveAdminAlertSettingsAsync(AdminAlertSettings settings, CancellationToken ct = default);
+
     /// <summary>One tenant's antiflood grouping settings; a transient default when unset.</summary>
     Task<CaptureAlertSettings> GetCaptureAlertSettingsAsync(int tenantId, CancellationToken ct = default);
 
