@@ -32,9 +32,9 @@ Solution `ComputerVisionTest.slnx` (central package management via
   API client (QR pairing + sendText/sendMedia; the dockerized Evolution API is
   the unofficial Baileys-based WhatsApp gateway).
 - `src/CameraVision.Api` — minimal API (port 5220): worker endpoints
-  (`X-Api-Key`) for cameras/capture-rules/status/capture-ingest, and the media
-  streaming service (`/media`, authorized by the web app's cookie via a shared
-  Data Protection key ring at `data/keys`).
+  (`X-Api-Key`) for cameras/capture-rules/status/heartbeat/capture-ingest, and
+  the media streaming service (`/media`, authorized by the web app's cookie via
+  a shared Data Protection key ring at `data/keys`).
 - `src/CameraVision.Web` — Blazor Server (InteractiveServer) + MudBlazor 9
   management app, PT-BR UI: cookie auth (login page is static SSR), camera CRUD
   + health monitor + health alerting (debounce, cooldown/flood cap/digest, event
@@ -43,11 +43,18 @@ Solution `ComputerVisionTest.slnx` (central package management via
   `TenantId` ("Cliente" in the UI); roles User/Admin/SuperAdmin — seeded
   `admin`/`admin2026` is the tenant-less SuperAdmin (manages tenants + system
   settings), `rubens.cordeiro@live.com.br`/`test` is the first tenant's admin.
+  System settings are one page per concern under the *Sistema* nav group
+  (`/system/smtp`, `/system/application`, `/system/whatsapp`,
+  `/system/alerts`). `WorkerHealthMonitor` tracks worker liveness (SPEC-15):
+  stale worker reports (>35 s) show "Sem processamento"/banners, and worker
+  down/recovery fires critical admin alerts (own e-mail/WhatsApp recipients in
+  `AdminAlertSettings`, history in `SystemAlertEvents`).
   Specs live in `./specs`.
 - `src/CameraVision.DetectionWorker` — the detection pipeline console app
   (below). Pulls cameras + capture rules from the API at startup (falls back to
   `data/cameras.json` + local `appsettings.json` when the API is down), reports
-  camera status, and registers finished recordings + thumbnails via the API.
+  camera status + a global heartbeat every 30 s, and registers finished
+  recordings + thumbnails via the API.
 
 Pipeline (`src/CameraVision.DetectionWorker`):
 

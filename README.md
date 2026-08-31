@@ -81,7 +81,11 @@ dotnet run --project src/CameraVision.Web
 - **Câmeras**: CRUD (incl. substream URL + preferred stream) + health badges
   (ICMP ping for latency, TCP probe for online/offline), worker status column
   and a per-camera health history dialog. First run imports
-  `data/cameras.json`.
+  `data/cameras.json`. A camera only shows **Online** while the worker keeps
+  its status fresh: reachable cameras whose worker report is older than ~35 s
+  show **"Sem processamento"** instead (neither online nor offline — nothing
+  is detecting/recording), and a red banner on the dashboard and cameras page
+  flags a stopped worker.
 - **Regras de Captura**: multiple rules per tenant — each says which classes
   are recorded, with which thresholds, and which alert channels fire (e.g.
   "gato → e-mail", "pessoa → WhatsApp"). The worker applies the union of all
@@ -105,7 +109,16 @@ dotnet run --project src/CameraVision.Web
   everyone and assigns tenants/roles.
 - **Clientes** / **Sistema**: SuperAdmin-only — tenant management (creating a
   client also creates its admin user, atomically) and the system
-  configuration (SMTP, Evolution/WhatsApp, public URL).
+  configuration, one page per concern under the *Sistema* menu group:
+  *E-mail (SMTP)*, *Aplicação* (public URL), *WhatsApp* (Evolution + QR
+  pairing) and *Alertas do sistema*.
+- **Alertas do sistema** (`/system/alerts`): the worker posts a global
+  heartbeat every 30 s; when it stops updating for
+  `Considerar parado após` seconds (default 90) the web app records a
+  **critical system alert** and notifies the system administrators by e-mail
+  and WhatsApp (own recipient lists, independent of tenant recipients), plus
+  a notice when the worker recovers. Cooldown between repeats, a test-send
+  button and a persisted event history live on the same page.
 
 The API (`src/CameraVision.Api`, port 5220) serves the worker endpoints
 (`X-Api-Key`, default `cameravision-dev-key` — change it in both
