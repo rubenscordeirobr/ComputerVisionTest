@@ -1,10 +1,12 @@
 @page "/cameras"
 @using CameraVision.Core.Health
 @using CameraVision.Web.Components.Dialogs
+@using CameraVision.Web.Services
 @implements IDisposable
 @inject ICameraRepository CameraRepo
 @inject ITenantRepository TenantRepo
 @inject ICameraHealthService Health
+@inject IWorkerHealthService WorkerHealthService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -18,6 +20,13 @@
         Nova câmera
     </MudButton>
 </div>
+
+@if (WorkerBannerText() is { } bannerText)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4" Icon="@Icons.Material.Filled.ReportProblem">
+        <b>Processador de vídeo parado.</b> @bannerText Nenhuma detecção está sendo processada ou gravada.
+    </MudAlert>
+}
 
 <MudPaper>
     <MudTable Items="_cameras" Hover="true" Loading="_loading" LoadingProgressColor="Color.Primary">
@@ -59,8 +68,17 @@
                            ValueChanged="@((bool value) => ToggleEnabledAsync(context, value))" />
             </MudTd>
             <MudTd DataLabel="Status">
-                @{ var (label, color) = StatusFor(context); }
-                <MudChip T="string" Color="@color" Size="Size.Small" Variant="Variant.Filled">@label</MudChip>
+                @{ var (label, color, tooltip) = StatusFor(context); }
+                @if (tooltip != null)
+                {
+                    <MudTooltip Text="@tooltip">
+                        <MudChip T="string" Color="@color" Size="Size.Small" Variant="Variant.Filled">@label</MudChip>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="@color" Size="Size.Small" Variant="Variant.Filled">@label</MudChip>
+                }
             </MudTd>
             <MudTd DataLabel="Latência">@LatencyFor(context)</MudTd>
             <MudTd DataLabel="Processador">
@@ -71,7 +89,9 @@
                 }
                 else
                 {
-                    <MudChip T="string" Color="@procColor" Size="Size.Small" Variant="Variant.Text">@procLabel</MudChip>
+                    <MudTooltip Text="@ProcessorTooltip(context)">
+                        <MudChip T="string" Color="@procColor" Size="Size.Small" Variant="Variant.Text">@procLabel</MudChip>
+                    </MudTooltip>
                 }
             </MudTd>
             <MudTd Style="text-align:right; white-space: nowrap;">
@@ -117,12 +137,23 @@
         }
 
         Health.Changed += OnHealthChanged;
+        WorkerHealthService.Changed += OnHealthChanged;
         await LoadAsync();
     }
 
-    public void Dispose() => Health.Changed -= OnHealthChanged;
+    public void Dispose()
+    {
+        Health.Changed -= OnHealthChanged;
+        WorkerHealthService.Changed -= OnHealthChanged;
+    }
 
-    private void OnHealthChanged() => _ = InvokeAsync(StateHasChanged);
+    // Reload on every probe cycle so ProcessorStatusAt (written by the API when the
+    // worker reports) stays fresh — staleness verdicts depend on it.
+    private void OnHealthChanged() => _ = InvokeAsync(async () =>
+    {
+        _cameras = await CameraRepo.GetAllAsync(_tenantFilter);
+        StateHasChanged();
+    });
 
     private async Task LoadAsync()
     {
@@ -133,26 +164,49 @@
 
     private string TenantNameOf(int tenantId) => _tenantNames.GetValueOrDefault(tenantId, "—");
 
-    private (string Label, Color Color) StatusFor(Camera camera)
+    private string? WorkerBannerText()
+    {
+        if (_cameras.Count == 0 || WorkerHealthService.Current is not { IsStale: true } snapshot)
+            return null;
+        return snapshot.LastSeenAt is { } seen
+            ? $"Última atualização às {seen:HH:mm:ss} ({TimeText.Ago(seen, DateTime.Now)})."
+            : "O processador nunca se conectou.";
+    }
+
+    private (string Label, Color Color, string? Tooltip) StatusFor(Camera camera)
     {
         if (!camera.Enabled)
-            return ("Desativada", Color.Default);
+            return ("Desativada", Color.Default, null);
         if (string.IsNullOrWhiteSpace(camera.StreamUrl) && string.IsNullOrWhiteSpace(camera.IpAddress))
-            return ("Sem stream", Color.Default);
+            return ("Sem stream", Color.Default, null);
 
-        return Health.TryGet(camera.Id)?.Status switch
+        var probe = Health.TryGet(camera.Id)?.Status;
+        if (probe == CameraStatus.Offline)
+            return ("Offline", Color.Error, null);
+        if (probe != CameraStatus.Online)
+            return ("Verificando…", Color.Default, null);
+
+        // The camera answers, but "Online" also requires the worker to keep its
+        // status fresh — otherwise nothing is actually processing the stream.
+        if (WorkerHealth.IsStale(camera.ProcessorStatusAt, DateTime.Now))
         {
-            CameraStatus.Online => ("Online", Color.Success),
-            CameraStatus.Offline => ("Offline", Color.Error),
-            _ => ("Verificando…", Color.Default),
-        };
+            var since = camera.ProcessorStatusAt is { } at
+                ? $"sem atualização desde {at:dd/MM HH:mm:ss}"
+                : "esta câmera nunca foi processada";
+            return ("Sem processamento", Color.Warning,
+                $"Câmera acessível, mas o processador de vídeo não está atualizando o status ({since}). " +
+                "Verifique se o CameraVision.DetectionWorker está em execução.");
+        }
+
+        return ("Online", Color.Success, null);
     }
 
     private static (string Label, Color Color) ProcessorFor(Camera camera)
     {
-        if (camera.ProcessorStatusAt == null ||
-            DateTime.Now - camera.ProcessorStatusAt > TimeSpan.FromMinutes(2))
+        if (camera.ProcessorStatusAt == null)
             return ("—", Color.Default);
+        if (WorkerHealth.IsStale(camera.ProcessorStatusAt, DateTime.Now))
+            return ("Sem resposta", Color.Error);
         return camera.ProcessorStatus switch
         {
             "connected" => ("Conectado", Color.Success),
@@ -161,6 +215,9 @@
             _ => ("—", Color.Default),
         };
     }
+
+    private static string ProcessorTooltip(Camera camera) =>
+        $"Última atualização do processador: {camera.ProcessorStatusAt:dd/MM/yyyy HH:mm:ss}";
 
     private string LatencyFor(Camera camera)
     {

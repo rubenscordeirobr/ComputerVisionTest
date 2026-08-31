@@ -1,0 +1,295 @@
+@page "/system/alerts"
+@attribute [Authorize(Policy = "SuperAdmin")]
+@using CameraVision.Core.Alerts
+@using CameraVision.Core.Health
+@implements IDisposable
+@inject ISettingsRepository SettingsRepo
+@inject ISystemAlertEventRepository EventsRepo
+@inject IWorkerHealthService WorkerHealthService
+@inject AdminAlertNotifier Notifier
+@inject ISnackbar Snackbar
+
+<PageTitle>Sistema · Alertas — CameraVision</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Alertas do sistema</MudText>
+
+<MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
+    <MudText Typo="Typo.h6" Class="mb-3">Processador de vídeo</MudText>
+    @{ var (workerLabel, workerColor, workerDetail) = WorkerStatusInfo(); }
+    <div class="d-flex align-center gap-3 mb-2">
+        <MudChip T="string" Color="@workerColor" Size="Size.Medium" Variant="Variant.Filled">@workerLabel</MudChip>
+        @if (workerDetail != null)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@workerDetail</MudText>
+        }
+    </div>
+    @if (WorkerHealthService.Current is { EverSeen: true } info)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            @if (info.Device != null)
+            {
+                <span>Dispositivo: @info.Device · </span>
+            }
+            @if (info.ActiveCameras is { } cams)
+            {
+                <span>Câmeras processadas: @cams · </span>
+            }
+            @if (info.StartedAt is { } started)
+            {
+                <span>Iniciado às @started.ToString("dd/MM/yyyy HH:mm:ss")</span>
+            }
+        </MudText>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
+    <MudText Typo="Typo.h6" Class="mb-3">Notificações críticas</MudText>
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        Quando o processador de vídeo (CameraVision.DetectionWorker) ficar sem atualizar o status,
+        os administradores do sistema abaixo recebem um alerta <b>crítico</b> por e-mail e WhatsApp,
+        além de um aviso quando o serviço normalizar.
+    </MudAlert>
+
+    <MudSwitch T="bool" @bind-Value="_settings.Enabled" Label="Ativado" Color="Color.Success" />
+
+    <MudGrid Spacing="2" Class="mt-2">
+        <MudItem xs="12" sm="6">
+            <MudNumericField T="int" @bind-Value="_settings.WorkerDownAfterSeconds"
+                             Label="Considerar parado após (segundos)" Min="45" Max="3600"
+                             HelperText="O processador atualiza o status a cada 30 s." />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudNumericField T="int" @bind-Value="_settings.CooldownMinutes"
+                             Label="Intervalo mínimo entre alertas (minutos)" Min="1" Max="1440" />
+        </MudItem>
+    </MudGrid>
+    <MudSwitch T="bool" @bind-Value="_settings.NotifyRecovery" Label="Avisar quando normalizar"
+               Color="Color.Success" Class="mt-1" />
+
+    <MudDivider Class="my-4" />
+
+    <div class="d-flex align-center gap-3 mb-1">
+        <MudText Typo="Typo.subtitle1">E-mails do administrador</MudText>
+        <MudSwitch T="bool" @bind-Value="_settings.NotifyEmail" Label="Enviar por e-mail" Color="Color.Success" />
+    </div>
+    <div class="d-flex align-start gap-2">
+        <MudTextField T="string" @bind-Value="_newEmail" Label="E-mail do administrador" Immediate="true"
+                      Error="@(_emailError != null)" ErrorText="@_emailError"
+                      OnKeyDown="OnEmailKeyDown" Style="max-width: 360px;" />
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="AddEmail">
+            Adicionar
+        </MudButton>
+    </div>
+    <div class="d-flex flex-wrap gap-1 mt-2 mb-4">
+        @if (_settings.Emails.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Nenhum e-mail adicionado.</MudText>
+        }
+        @foreach (var email in _settings.Emails)
+        {
+            <MudChip T="string" Color="Color.Default" OnClose="@(() => { _settings.Emails.Remove(email); })">
+                @email
+            </MudChip>
+        }
+    </div>
+
+    <div class="d-flex align-center gap-3 mb-1">
+        <MudText Typo="Typo.subtitle1">WhatsApp do administrador</MudText>
+        <MudSwitch T="bool" @bind-Value="_settings.NotifyWhatsApp" Label="Enviar por WhatsApp" Color="Color.Success" />
+    </div>
+    <div class="d-flex align-start gap-2">
+        <MudTextField T="string" @bind-Value="_newPhone" Label="Número (ex.: +5549999999999)" Immediate="true"
+                      Error="@(_phoneError != null)" ErrorText="@_phoneError"
+                      OnKeyDown="OnPhoneKeyDown" Style="max-width: 360px;" />
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="AddPhone">
+            Adicionar
+        </MudButton>
+    </div>
+    <div class="d-flex flex-wrap gap-1 mt-2">
+        @if (_settings.WhatsAppNumbers.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Nenhum número adicionado.</MudText>
+        }
+        @foreach (var phone in _settings.WhatsAppNumbers)
+        {
+            <MudChip T="string" Color="Color.Default" OnClose="@(() => { _settings.WhatsAppNumbers.Remove(phone); })">
+                @phone
+            </MudChip>
+        }
+    </div>
+
+    <div class="d-flex justify-end gap-2 mt-6">
+        <MudButton Variant="Variant.Outlined" Color="Color.Success" Disabled="@_testing"
+                   StartIcon="@Icons.Material.Filled.Send" OnClick="SendTestAsync">
+            Enviar alerta de teste
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">
+            Salvar
+        </MudButton>
+    </div>
+</MudPaper>
+
+<MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
+    <div class="d-flex align-center mb-3">
+        <MudText Typo="Typo.h6">Histórico</MudText>
+        <MudSpacer />
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small"
+                       OnClick="LoadEventsAsync" aria-label="Atualizar histórico" />
+    </div>
+    <MudTable Items="_events" Dense="true" Hover="true">
+        <HeaderContent>
+            <MudTh>Quando</MudTh>
+            <MudTh>Evento</MudTh>
+            <MudTh>Detalhe</MudTh>
+            <MudTh>Notificado</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Quando">@context.OccurredAt.ToString("dd/MM/yyyy HH:mm:ss")</MudTd>
+            <MudTd DataLabel="Evento">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Color="@(context.Type == SystemAlertType.WorkerDown ? Color.Error : Color.Success)">
+                    @WorkerHealthMonitor.TypeLabelPtBr(context.Type)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Detalhe">@(context.Detail ?? "—")</MudTd>
+            <MudTd DataLabel="Notificado">
+                @(context.NotifiedAt is { } notified ? notified.ToString("HH:mm:ss") : "—")
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary">Nenhum evento registrado.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private AdminAlertSettings _settings = new();
+    private IReadOnlyList<SystemAlertEvent> _events = [];
+    private string _newEmail = "";
+    private string? _emailError;
+    private string _newPhone = "";
+    private string? _phoneError;
+    private bool _testing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        WorkerHealthService.Changed += OnWorkerChanged;
+        _settings = await SettingsRepo.GetAdminAlertSettingsAsync();
+        await LoadEventsAsync();
+    }
+
+    public void Dispose() => WorkerHealthService.Changed -= OnWorkerChanged;
+
+    private void OnWorkerChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task LoadEventsAsync() => _events = await EventsRepo.GetRecentAsync(50);
+
+    private (string Label, Color Color, string? Detail) WorkerStatusInfo()
+    {
+        var snapshot = WorkerHealthService.Current;
+        if (snapshot == null)
+            return ("Verificando…", Color.Default, null);
+        if (!snapshot.EverSeen)
+            return ("Nunca conectado", Color.Default, "O processador nunca reportou status ao sistema.");
+        if (snapshot.IsStale)
+            return ("Parado", Color.Error,
+                $"Sem atualização desde {snapshot.LastSeenAt:dd/MM/yyyy HH:mm:ss} " +
+                $"({TimeText.Ago(snapshot.LastSeenAt!.Value, DateTime.Now)}).");
+        return ("Em execução", Color.Success,
+            $"Última atualização {TimeText.Ago(snapshot.LastSeenAt!.Value, DateTime.Now)}.");
+    }
+
+    private void OnEmailKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            AddEmail();
+    }
+
+    private void OnPhoneKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            AddPhone();
+    }
+
+    private void AddEmail()
+    {
+        _emailError = null;
+        var value = _newEmail.Trim();
+        if (value.Length == 0)
+            return;
+        if (!System.Net.Mail.MailAddress.TryCreate(value, out _))
+        {
+            _emailError = "E-mail inválido.";
+            return;
+        }
+        if (_settings.Emails.Contains(value, StringComparer.OrdinalIgnoreCase))
+        {
+            _emailError = "E-mail já adicionado.";
+            return;
+        }
+        _settings.Emails.Add(value);
+        _newEmail = "";
+    }
+
+    private void AddPhone()
+    {
+        _phoneError = null;
+        var value = _newPhone.Trim()
+            .Replace(" ", "").Replace("-", "").Replace("(", "").Replace(")", "");
+        if (value.Length == 0)
+            return;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(value, @"^\+?\d{10,15}$"))
+        {
+            _phoneError = "Número inválido. Use o formato +5549999999999.";
+            return;
+        }
+        if (_settings.WhatsAppNumbers.Contains(value, StringComparer.OrdinalIgnoreCase))
+        {
+            _phoneError = "Número já adicionado.";
+            return;
+        }
+        _settings.WhatsAppNumbers.Add(value);
+        _newPhone = "";
+    }
+
+    private async Task SaveAsync()
+    {
+        await SettingsRepo.SaveAdminAlertSettingsAsync(_settings);
+        Snackbar.Add("Configurações de alertas do sistema salvas.", Severity.Success);
+    }
+
+    private async Task SendTestAsync()
+    {
+        _testing = true;
+        try
+        {
+            // Uses the form as-is (unsaved changes included) so recipients can be
+            // validated before saving.
+            var now = DateTime.Now;
+            var message = new AlertMessage(
+                "Teste — alertas do sistema CameraVision",
+                "<div style=\"font-family:Roboto,Arial,sans-serif;max-width:520px\">" +
+                "<h2 style=\"color:#594ae2;margin:0 0 12px\">Alerta do sistema</h2>" +
+                "<p style=\"margin:0 0 8px\">Mensagem de <b>teste</b> dos alertas críticos do sistema. " +
+                "Se você a recebeu, as notificações estão funcionando.</p>" +
+                $"<p style=\"margin:0 0 16px;color:#666\">Enviada às {now:dd/MM/yyyy HH:mm:ss}.</p>" +
+                "<p style=\"color:#888;font-size:12px\">CameraVision — alerta automático do sistema, não responda.</p>" +
+                "</div>",
+                "Mensagem de teste dos alertas críticos do sistema CameraVision. " +
+                $"Se você a recebeu, as notificações estão funcionando.\n\nEnviada às {now:dd/MM/yyyy HH:mm:ss}.");
+            var sent = await Notifier.SendAsync(message, _settings);
+            Snackbar.Add(
+                sent
+                    ? "Alerta de teste enviado."
+                    : "Nenhum canal enviou o teste — verifique os destinatários e as configurações de SMTP/WhatsApp.",
+                sent ? Severity.Success : Severity.Warning);
+        }
+        finally
+        {
+            _testing = false;
+        }
+    }
+}

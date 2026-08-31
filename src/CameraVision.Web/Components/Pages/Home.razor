@@ -1,13 +1,28 @@
 @page "/"
+@using CameraVision.Core.Health
+@using CameraVision.Web.Services
+@implements IDisposable
 @inject ICameraRepository CameraRepo
 @inject ICaptureRepository CaptureRepo
+@inject IWorkerHealthService WorkerHealthService
 
 <PageTitle>Painel — CameraVision</PageTitle>
 
 <MudText Typo="Typo.h4" Class="mb-4">Painel</MudText>
 
+@if (WorkerHealthService.Current is { IsStale: true } stale && _camerasTotal > 0)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4" Icon="@Icons.Material.Filled.ReportProblem">
+        <b>Processador de vídeo parado.</b>
+        @(stale.LastSeenAt is { } seen
+            ? $" Última atualização às {seen:HH:mm:ss} ({TimeText.Ago(seen, DateTime.Now)})."
+            : " O processador nunca se conectou.")
+        Nenhuma detecção está sendo processada ou gravada.
+    </MudAlert>
+}
+
 <MudGrid>
-    <MudItem xs="12" sm="6" md="4">
+    <MudItem xs="12" sm="6" md="3">
         <MudCard>
             <MudCardContent>
                 <div class="d-flex align-center gap-3">
@@ -23,7 +38,30 @@
             </MudCardActions>
         </MudCard>
     </MudItem>
-    <MudItem xs="12" sm="6" md="4">
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard>
+            <MudCardContent>
+                <div class="d-flex align-center gap-3">
+                    @{ var (workerLabel, workerColor, workerDetail) = WorkerCard(); }
+                    <MudIcon Icon="@Icons.Material.Filled.Memory" Color="@workerColor" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h5">@workerLabel</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Processador de vídeo</MudText>
+                        @if (workerDetail != null)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@workerDetail</MudText>
+                        }
+                    </div>
+                </div>
+            </MudCardContent>
+            <MudCardActions>
+                <AuthorizeView Policy="SuperAdmin">
+                    <MudButton Href="/system/alerts" Color="Color.Primary">Alertas do sistema</MudButton>
+                </AuthorizeView>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
         <MudCard>
             <MudCardContent>
                 <div class="d-flex align-center gap-3">
@@ -39,7 +77,7 @@
             </MudCardActions>
         </MudCard>
     </MudItem>
-    <MudItem xs="12" sm="6" md="4">
+    <MudItem xs="12" sm="6" md="3">
         <MudCard>
             <MudCardContent>
                 <div class="d-flex align-center gap-3">
@@ -71,10 +109,31 @@
         var auth = await AuthState;
         var tenantFilter = auth.User.GetTenantFilter();
 
+        WorkerHealthService.Changed += OnWorkerChanged;
+
         var cameras = await CameraRepo.GetAllAsync(tenantFilter);
         _camerasTotal = cameras.Count;
         _camerasEnabled = cameras.Count(c => c.Enabled);
         _capturesTotal = await CaptureRepo.CountAsync(tenantId: tenantFilter);
         _capturesToday = await CaptureRepo.CountAsync(DateTime.Today, tenantFilter);
+    }
+
+    public void Dispose() => WorkerHealthService.Changed -= OnWorkerChanged;
+
+    private void OnWorkerChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private (string Label, Color Color, string? Detail) WorkerCard()
+    {
+        var snapshot = WorkerHealthService.Current;
+        if (snapshot == null)
+            return ("Verificando…", Color.Default, null);
+        if (!snapshot.EverSeen)
+            return ("Nunca conectado", Color.Default, "Inicie o CameraVision.DetectionWorker.");
+        if (snapshot.IsStale)
+            return ("Parado", Color.Error,
+                $"Sem atualização desde {snapshot.LastSeenAt:HH:mm:ss} ({TimeText.Ago(snapshot.LastSeenAt!.Value, DateTime.Now)}).");
+        var device = snapshot.Device == null ? "" : $" · {snapshot.Device}";
+        return ("Em execução", Color.Success,
+            $"Atualizado {TimeText.Ago(snapshot.LastSeenAt!.Value, DateTime.Now)}{device}");
     }
 }

@@ -63,6 +63,11 @@ builder.Services.AddSingleton<CameraHealthAlertService>();
 builder.Services.AddSingleton<ICameraHealthCycleListener>(sp => sp.GetRequiredService<CameraHealthAlertService>());
 builder.Services.AddHostedService<HealthDigestHostedService>();
 
+builder.Services.AddSingleton<AdminAlertNotifier>();
+builder.Services.AddSingleton<WorkerHealthMonitor>();
+builder.Services.AddSingleton<IWorkerHealthService>(sp => sp.GetRequiredService<WorkerHealthMonitor>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<WorkerHealthMonitor>());
+
 builder.Services.AddSingleton<ICaptureIndexer, CaptureIndexer>();
 builder.Services.AddHostedService<CaptureIndexHostedService>();
 
