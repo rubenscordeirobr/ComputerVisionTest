@@ -13,6 +13,11 @@
 			api_secret_key {env.PORKBUN_API_SECRET}
 		}
 	}
+
+	# After the first https visit the browser upgrades plain-http attempts
+	# itself (typing host:8443 in the address bar defaults to http, which a
+	# TLS-only listener can only answer with an error).
+	header Strict-Transport-Security "max-age=31536000"
 }
 
 # Live annotated streams from MediaMTX: WebRTC signaling (WHEP) and HLS.
