@@ -14,10 +14,11 @@
 		}
 	}
 
-	# After the first https visit the browser upgrades plain-http attempts
-	# itself (typing host:8443 in the address bar defaults to http, which a
-	# TLS-only listener can only answer with an error).
-	header Strict-Transport-Security "max-age=31536000"
+	# max-age=0 actively clears any pinned HSTS state. HSTS must stay off
+	# here: it pins the *hostname* (ports ignored), and port 443 for these
+	# names belongs to IIS, which has no certificate for them — a pinned
+	# browser typing the bare domain would hit a non-bypassable cert error.
+	header Strict-Transport-Security "max-age=0"
 }
 
 # Live annotated streams from MediaMTX: WebRTC signaling (WHEP) and HLS.
