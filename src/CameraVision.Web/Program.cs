@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
@@ -124,6 +125,18 @@ await LegacyCameraImporter.ImportIfEmptyAsync(
     app.Services.GetRequiredService<ITenantRepository>(), legacyCamerasFile, app.Logger);
 await LegacyCameraImporter.EnrichFromLegacyAsync(
     app.Services.GetRequiredService<ICameraRepository>(), legacyCamerasFile, app.Logger);
+
+// Behind the Caddy HTTPS proxy the app is reached over plain http; honoring
+// X-Forwarded-Proto keeps absolute URLs (e.g. the login redirect) on the
+// public https scheme. Caddy connects from the Docker NAT address, so the
+// default loopback-only proxy trust lists must be cleared.
+var forwardedHeaders = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedProto,
+};
+forwardedHeaders.KnownNetworks.Clear();
+forwardedHeaders.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeaders);
 
 if (!app.Environment.IsDevelopment())
 {
