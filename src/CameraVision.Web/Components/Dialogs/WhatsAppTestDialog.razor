@@ -44,13 +44,9 @@
     private bool _sending;
 
     private static string NormalizePhone(string value) =>
-        value.Replace(" ", "").Replace("-", "").Replace("(", "").Replace(")", "");
+        CameraVision.Core.Alerts.RecipientNormalizer.NormalizePhone(value) ?? value.Trim();
 
-    private string? ValidatePhone(string value) =>
-        string.IsNullOrWhiteSpace(value) ||
-        System.Text.RegularExpressions.Regex.IsMatch(NormalizePhone(value), @"^\+?\d{10,15}$")
-            ? null
-            : "Número inválido. Use o formato +5549999999999.";
+    private static string? ValidatePhone(string value) => RecipientValidation.OptionalPhone(value);
 
     private void Cancel() => MudDialog.Cancel();
 

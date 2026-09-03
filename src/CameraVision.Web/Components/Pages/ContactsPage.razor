@@ -1,0 +1,165 @@
+@page "/contacts"
+@using CameraVision.Web.Components.Dialogs
+@inject IContactRepository ContactRepo
+@inject ITenantRepository TenantRepo
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Contatos — CameraVision</PageTitle>
+
+<div class="d-flex align-center mb-4">
+    <MudText Typo="Typo.h4">Contatos</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="AddContactAsync">
+        Novo contato
+    </MudButton>
+</div>
+
+<MudAlert Severity="Severity.Info" Class="mb-4" Style="max-width: 1000px;">
+    Contatos são quem recebe as notificações. Cada regra de captura escolhe quais contatos avisar
+    e quando (<MudLink Href="/capture-settings">Regras de Captura</MudLink> → Notificações); os
+    alertas de saúde das câmeras vão para os contatos marcados abaixo.
+</MudAlert>
+
+<MudPaper>
+    <MudTable Items="_contacts" Hover="true" Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh>Nome</MudTh>
+            @if (_isSuperAdmin)
+            {
+                <MudTh>Cliente</MudTh>
+            }
+            <MudTh>E-mail</MudTh>
+            <MudTh>WhatsApp</MudTh>
+            <MudTh>Saúde das câmeras</MudTh>
+            <MudTh Style="text-align:right">Ações</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Nome">@context.Name</MudTd>
+            @if (_isSuperAdmin)
+            {
+                <MudTd DataLabel="Cliente">@TenantNameOf(context.TenantId)</MudTd>
+            }
+            <MudTd DataLabel="E-mail">@(context.Email ?? "—")</MudTd>
+            <MudTd DataLabel="WhatsApp">@(context.WhatsAppNumber ?? "—")</MudTd>
+            <MudTd DataLabel="Saúde das câmeras">
+                @if (context.NotifyCameraHealth)
+                {
+                    <MudTooltip Text="Recebe os alertas de saúde das câmeras">
+                        <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Success" Size="Size.Small" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                }
+            </MudTd>
+            <MudTd Style="text-align:right; white-space: nowrap;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                               OnClick="@(() => EditContactAsync(context))" aria-label="Editar" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteContactAsync(context))" aria-label="Excluir" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary">Nenhum contato cadastrado.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private IReadOnlyList<Contact> _contacts = [];
+    private IReadOnlyList<Tenant> _tenants = [];
+    private Dictionary<int, string> _tenantNames = [];
+    private bool _loading = true;
+    private bool _isSuperAdmin;
+    private int? _tenantFilter;
+    private int? _ownTenantId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState;
+        _isSuperAdmin = auth.User.IsSuperAdmin();
+        _tenantFilter = auth.User.GetTenantFilter();
+        _ownTenantId = auth.User.GetTenantId();
+        if (_isSuperAdmin)
+        {
+            _tenants = await TenantRepo.GetAllAsync();
+            _tenantNames = _tenants.ToDictionary(t => t.Id, t => t.Name);
+        }
+        await LoadAsync();
+    }
+
+    private string TenantNameOf(int tenantId) => _tenantNames.GetValueOrDefault(tenantId, "—");
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _contacts = await ContactRepo.GetAllAsync(_tenantFilter);
+        _loading = false;
+    }
+
+    private async Task AddContactAsync()
+    {
+        var contact = new Contact
+        {
+            TenantId = _isSuperAdmin ? _tenants.FirstOrDefault()?.Id ?? 0 : _ownTenantId ?? 0,
+        };
+        await OpenDialogAsync("Novo contato", contact);
+    }
+
+    private async Task EditContactAsync(Contact contact)
+    {
+        var copy = new Contact
+        {
+            Id = contact.Id,
+            TenantId = contact.TenantId,
+            Name = contact.Name,
+            Email = contact.Email,
+            WhatsAppNumber = contact.WhatsAppNumber,
+            NotifyCameraHealth = contact.NotifyCameraHealth,
+            CreatedAt = contact.CreatedAt,
+        };
+        await OpenDialogAsync("Editar contato", copy);
+    }
+
+    private async Task OpenDialogAsync(string title, Contact contact)
+    {
+        var parameters = new DialogParameters<ContactDialog>
+        {
+            { d => d.Contact, contact },
+            { d => d.ShowTenantSelect, _isSuperAdmin },
+            { d => d.Tenants, _tenants },
+        };
+        var dialog = await DialogService.ShowAsync<ContactDialog>(title, parameters, DialogOpts);
+        if ((await dialog.Result) is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task DeleteContactAsync(Contact contact)
+    {
+        var usages = await ContactRepo.CountTriggerUsagesAsync(contact.Id);
+        var detail = usages switch
+        {
+            0 => "Ele não é usado em nenhuma notificação.",
+            1 => "Ele será removido de 1 notificação de regra.",
+            _ => $"Ele será removido de {usages} notificações de regras.",
+        };
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Excluir contato",
+            $"Excluir o contato \"{contact.Name}\"? {detail}",
+            yesText: "Excluir", cancelText: "Cancelar");
+        if (confirmed == true)
+        {
+            await ContactRepo.DeleteAsync(contact.Id);
+            Snackbar.Add("Contato excluído.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private static readonly DialogOptions DialogOpts = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+}

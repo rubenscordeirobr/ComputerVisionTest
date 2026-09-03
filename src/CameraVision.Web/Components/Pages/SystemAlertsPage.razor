@@ -220,38 +220,36 @@
         var value = _newEmail.Trim();
         if (value.Length == 0)
             return;
-        if (!System.Net.Mail.MailAddress.TryCreate(value, out _))
+        if (RecipientNormalizer.NormalizeEmail(value) is not { } email)
         {
-            _emailError = "E-mail inválido.";
+            _emailError = RecipientValidation.InvalidEmail;
             return;
         }
-        if (_settings.Emails.Contains(value, StringComparer.OrdinalIgnoreCase))
+        if (_settings.Emails.Contains(email, StringComparer.OrdinalIgnoreCase))
         {
-            _emailError = "E-mail já adicionado.";
+            _emailError = RecipientValidation.DuplicateError(AlertChannel.Email);
             return;
         }
-        _settings.Emails.Add(value);
+        _settings.Emails.Add(email);
         _newEmail = "";
     }
 
     private void AddPhone()
     {
         _phoneError = null;
-        var value = _newPhone.Trim()
-            .Replace(" ", "").Replace("-", "").Replace("(", "").Replace(")", "");
-        if (value.Length == 0)
+        if (_newPhone.Trim().Length == 0)
             return;
-        if (!System.Text.RegularExpressions.Regex.IsMatch(value, @"^\+?\d{10,15}$"))
+        if (RecipientNormalizer.NormalizePhone(_newPhone) is not { } phone)
         {
-            _phoneError = "Número inválido. Use o formato +5549999999999.";
+            _phoneError = RecipientValidation.InvalidPhone;
             return;
         }
-        if (_settings.WhatsAppNumbers.Contains(value, StringComparer.OrdinalIgnoreCase))
+        if (_settings.WhatsAppNumbers.Contains(phone, StringComparer.OrdinalIgnoreCase))
         {
-            _phoneError = "Número já adicionado.";
+            _phoneError = RecipientValidation.DuplicateError(AlertChannel.WhatsApp);
             return;
         }
-        _settings.WhatsAppNumbers.Add(value);
+        _settings.WhatsAppNumbers.Add(phone);
         _newPhone = "";
     }
 

@@ -1,0 +1,107 @@
+@using CameraVision.Core.Alerts
+@inject IContactRepository ContactRepo
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            @if (ShowTenantSelect)
+            {
+                <MudSelect T="int" @bind-Value="Contact.TenantId" Label="Cliente" Class="mb-3"
+                           AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var tenant in Tenants)
+                    {
+                        <MudSelectItem T="int" Value="@tenant.Id">@tenant.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            <MudTextField T="string" @bind-Value="Contact.Name" Label="Nome" MaxLength="100"
+                          Required="true" RequiredError="Informe o nome do contato."
+                          Validation="@(new Func<string, Task<string?>>(ValidateNameAsync))" />
+            <MudTextField T="string" @bind-Value="_email" Label="E-mail" MaxLength="200" Class="mt-3"
+                          Validation="@(new Func<string, string?>(RecipientValidation.OptionalEmail))" />
+            <MudTextField T="string" @bind-Value="_phone" Label="@RecipientValidation.PhoneLabel" MaxLength="30"
+                          Class="mt-3" Validation="@(new Func<string, string?>(RecipientValidation.OptionalPhone))" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Informe ao menos um dos dois. As regras só oferecem o contato nos canais em que ele tem endereço.
+            </MudText>
+            <MudSwitch T="bool" @bind-Value="Contact.NotifyCameraHealth" Label="Recebe alertas de saúde das câmeras"
+                       Color="Color.Success" Class="mt-3" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Contact Contact { get; set; } = new();
+
+    /// <summary>SuperAdmin editors pick the owning tenant explicitly.</summary>
+    [Parameter]
+    public bool ShowTenantSelect { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<Tenant> Tenants { get; set; } = [];
+
+    private MudForm _form = default!;
+    private string? _email;
+    private string? _phone;
+
+    protected override void OnInitialized()
+    {
+        _email = Contact.Email;
+        _phone = Contact.WhatsAppNumber;
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+        if (Contact.TenantId == 0)
+        {
+            Snackbar.Add("Selecione o cliente do contato.", Severity.Warning);
+            return;
+        }
+
+        var email = RecipientNormalizer.Normalize(AlertChannel.Email, _email);
+        var phone = RecipientNormalizer.Normalize(AlertChannel.WhatsApp, _phone);
+        if (email == null && phone == null)
+        {
+            Snackbar.Add("Informe ao menos um e-mail ou número de WhatsApp.", Severity.Warning);
+            return;
+        }
+
+        Contact.Name = Contact.Name.Trim();
+        Contact.Email = email;
+        Contact.WhatsAppNumber = phone;
+
+        if (Contact.Id == 0)
+        {
+            await ContactRepo.AddAsync(Contact);
+            Snackbar.Add("Contato criado.", Severity.Success);
+        }
+        else
+        {
+            await ContactRepo.UpdateAsync(Contact);
+            Snackbar.Add("Contato atualizado.", Severity.Success);
+        }
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task<string?> ValidateNameAsync(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || Contact.TenantId == 0)
+            return null;
+        var exists = await ContactRepo.NameExistsAsync(Contact.TenantId, name, Contact.Id == 0 ? null : Contact.Id);
+        return exists ? "Já existe um contato com este nome." : null;
+    }
+}
