@@ -7,10 +7,12 @@ using CameraVision.Core.Commands;
 using CameraVision.Core.Entities;
 using CameraVision.Core.Health;
 using CameraVision.Core.Repositories;
+using CameraVision.Core.Speech;
 using CameraVision.Infrastructure;
 using CameraVision.Infrastructure.Ai;
 using CameraVision.Infrastructure.Alerts;
 using CameraVision.Infrastructure.Data;
+using CameraVision.Infrastructure.Speech;
 using CameraVision.Web.Components;
 using CameraVision.Web.Services;
 using Microsoft.AspNetCore.Antiforgery;
@@ -94,6 +96,8 @@ builder.Services.AddSingleton<ILlmClient, GeminiLlmClient>();
 builder.Services.AddSingleton<ILlmClient, DeepSeekLlmClient>();
 builder.Services.AddSingleton<IIntentClassifier, LlmIntentClassifier>();
 builder.Services.AddHostedService<WhatsAppCommandHostedService>();
+// Voice notes (SPEC-19) are transcribed by the local Whisper server before interpretation.
+builder.Services.AddSingleton<ISpeechToTextClient, WhisperSpeechToTextClient>();
 
 // Authentication: cookie scheme + PasswordHasher over the custom AppUser table
 // (full ASP.NET Core Identity is overkill for one LAN admin — see SPEC-08).

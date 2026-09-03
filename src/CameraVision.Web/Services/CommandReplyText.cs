@@ -40,6 +40,18 @@ public static class CommandReplyText
         "• \"status\" — situação das câmeras e do processador\n" +
         "• \"últimas 5 capturas de pessoas\" — lista com links dos vídeos";
 
+    /// <summary>Prefix of every reply to a voice note, so the sender can spot a bad transcription.</summary>
+    public static string Heard(string transcript) => $"🎤 Entendi: \"{transcript}\"\n\n";
+
+    public static string AudioDisabled() =>
+        "Comandos por áudio estão desativados — envie o pedido por texto.";
+
+    public static string AudioTooLong(int maxSeconds) =>
+        $"Áudio muito longo (máximo de {maxSeconds} s). Envie um áudio mais curto ou o pedido por texto.";
+
+    public static string AudioNotUnderstood() =>
+        "Não consegui entender o áudio. Tente de novo ou envie o pedido por texto.";
+
     public const string ChannelOffNote =
         "Obs.: o canal WhatsApp está desativado nas configurações de alertas do seu cliente — as mensagens só saem quando ele for ligado.";
 

@@ -161,7 +161,13 @@
                 @(context.PushName ?? context.SenderNumber)
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.SenderNumber</MudText>
             </MudTd>
-            <MudTd DataLabel="Mensagem">@context.Text</MudTd>
+            <MudTd DataLabel="Mensagem">
+                @if (context.Kind == WhatsAppMessageKind.Audio)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Mic" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                }
+                @(context.Text.Length > 0 ? context.Text : context.Kind == WhatsAppMessageKind.Audio ? "(áudio)" : "")
+            </MudTd>
             <MudTd DataLabel="Intenção" Style="white-space: nowrap;">
                 @CommandReplyText.IntentLabel(context.Intent)
                 @if (context.IntentSource != null)
@@ -270,9 +276,11 @@
             return ("Webhook não verificado", Color.Default);
         if (!_webhook.Enabled || string.IsNullOrWhiteSpace(_webhook.Url))
             return ("Webhook não registrado", Color.Warning);
-        return string.Equals(_webhook.Url.TrimEnd('/'), _settings.WhatsAppWebhookUrl?.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase)
+        if (!string.Equals(_webhook.Url.TrimEnd('/'), _settings.WhatsAppWebhookUrl?.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+            return ("Webhook aponta para outra URL", Color.Warning);
+        return _webhook.Base64
             ? ("Webhook registrado", Color.Success)
-            : ("Webhook aponta para outra URL", Color.Warning);
+            : ("Webhook sem áudio — registre novamente", Color.Warning);
     }
 
     private static (string Label, Color Color) StatusChip(WhatsAppCommandStatus status) => status switch

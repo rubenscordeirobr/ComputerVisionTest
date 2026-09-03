@@ -2,8 +2,10 @@
 @attribute [Authorize(Policy = "SuperAdmin")]
 @using CameraVision.Core.Ai
 @using CameraVision.Core.Commands
+@using CameraVision.Core.Speech
 @inject ISettingsRepository SettingsRepo
 @inject IIntentClassifier Classifier
+@inject ISpeechToTextClient SpeechToText
 @inject ISnackbar Snackbar
 
 <PageTitle>Sistema · Inteligência artificial — CameraVision</PageTitle>
@@ -93,14 +95,68 @@
     }
 </MudPaper>
 
+<MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
+    <div class="d-flex align-center gap-3 mb-2">
+        <MudText Typo="Typo.subtitle1">Transcrição de áudio (Whisper)</MudText>
+        @if (_whisperOk != null)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@(_whisperOk == true ? Color.Success : Color.Error)">
+                @(_whisperOk == true ? "Whisper respondeu" : "Whisper indisponível")
+            </MudChip>
+        }
+    </div>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Áudios enviados ao número pareado são transcritos pelo servidor Whisper local (serviço
+        <code>whisper</code> do docker-compose, porta 9000) e tratados como texto; a resposta
+        continua em texto, começando pelo que foi entendido.
+    </MudText>
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="6">
+            <MudSwitch T="bool" @bind-Value="_settings.WhatsAppAudioEnabled" Color="Color.Success" Label="Aceitar comandos por áudio" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudNumericField T="int" @bind-Value="_settings.WhatsAppAudioMaxSeconds" Label="Duração máxima (s)" Min="5" Max="600" />
+        </MudItem>
+        <MudItem xs="12" sm="8">
+            <MudTextField T="string" @bind-Value="_settings.WhisperBaseUrl" Label="URL do servidor Whisper"
+                          Placeholder="http://localhost:9000"
+                          Validation="@(new Func<string, string?>(SettingsValidation.OptionalUrl))" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudTextField T="string" @bind-Value="_settings.WhisperLanguage" Label="Idioma" HelperText="pt, en… ou vazio = automático" />
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField T="string" @bind-Value="_settings.WhisperApiKey" Label="Chave (WHISPER_API_KEY)"
+                          InputType="@(_showWhisperKey ? InputType.Text : InputType.Password)"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@(_showWhisperKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                          OnAdornmentClick="@(() => _showWhisperKey = !_showWhisperKey)" />
+        </MudItem>
+    </MudGrid>
+    <div class="d-flex justify-end gap-2 mt-4 flex-wrap">
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@_testingWhisper"
+                   StartIcon="@Icons.Material.Filled.Mic" OnClick="TestWhisperAsync">Testar Whisper</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Salvar</MudButton>
+    </div>
+    @if (_whisperError != null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-3">@_whisperError</MudAlert>
+    }
+</MudPaper>
+
 <MudText Typo="Typo.caption" Class="mud-text-secondary">
-    A chave é armazenada localmente sem criptografia (v1, uso em rede local). Custo por mensagem:
+    As chaves são armazenadas localmente sem criptografia (v1, uso em rede local). Custo por mensagem:
     baixo, médio ou alto conforme o modelo — cada comando gera uma chamada curta.
 </MudText>
 
 @code {
     private SystemSettings _settings = new();
     private bool _showApiKey;
+    private bool _showWhisperKey;
+    private bool _testingWhisper;
+    private bool? _whisperOk;
+    private string? _whisperError;
     private string _testText = "";
     private bool _testing;
     private CommandInterpretation? _testResult;
@@ -135,6 +191,50 @@
         }
         await SettingsRepo.SaveSystemSettingsAsync(_settings);
         Snackbar.Add("Configurações salvas.", Severity.Success);
+    }
+
+    private async Task TestWhisperAsync()
+    {
+        _testingWhisper = true;
+        _whisperError = null;
+        try
+        {
+            // One second of 16 kHz mono silence: enough to prove the server answers.
+            var result = await SpeechToText.TranscribeAsync(_settings,
+                new SpeechToTextRequest(SilentWav(), "audio/wav", "test.wav",
+                    string.IsNullOrWhiteSpace(_settings.WhisperLanguage) ? null : _settings.WhisperLanguage));
+            _whisperOk = result.Success;
+            _whisperError = result.Error;
+        }
+        finally
+        {
+            _testingWhisper = false;
+        }
+    }
+
+    private static byte[] SilentWav()
+    {
+        const int sampleRate = 16000;
+        const int seconds = 1;
+        var dataSize = sampleRate * seconds * 2;
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write("RIFF"u8);
+        writer.Write(36 + dataSize);
+        writer.Write("WAVE"u8);
+        writer.Write("fmt "u8);
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write((short)1);
+        writer.Write(sampleRate);
+        writer.Write(sampleRate * 2);
+        writer.Write((short)2);
+        writer.Write((short)16);
+        writer.Write("data"u8);
+        writer.Write(dataSize);
+        writer.Write(new byte[dataSize]);
+        writer.Flush();
+        return stream.ToArray();
     }
 
     private async Task TestAsync()

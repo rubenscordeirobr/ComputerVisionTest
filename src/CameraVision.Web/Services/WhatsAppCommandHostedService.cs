@@ -4,6 +4,7 @@ using CameraVision.Core.Commands;
 using CameraVision.Core.Entities;
 using CameraVision.Core.Health;
 using CameraVision.Core.Repositories;
+using CameraVision.Core.Speech;
 using CameraVision.Core.WhatsApp;
 using CameraVision.Infrastructure.Alerts;
 
@@ -18,7 +19,9 @@ namespace CameraVision.Web.Services;
 /// validity is activated for the default hours and the agent asks "até quando?"; the
 /// sender's next message within 10 min may then move the end. "status" and "últimas N
 /// capturas" (SPEC-18) are read-only reports composed from the health services and the
-/// capture repository.
+/// capture repository. Voice notes (SPEC-19) are transcribed first through
+/// <see cref="ISpeechToTextClient"/> and then handled exactly like text, with the
+/// transcript quoted at the top of the reply.
 /// </summary>
 public sealed class WhatsAppCommandHostedService(
     IWhatsAppCommandRepository commands,
@@ -32,6 +35,8 @@ public sealed class WhatsAppCommandHostedService(
     IWorkerHealthService workerHealth,
     CaptureLinkService links,
     CaptureAlertComposer composer,
+    ISpeechToTextClient speechToText,
+    StoragePaths storage,
     IEvolutionApiClient evolution,
     ILogger<WhatsAppCommandHostedService> logger) : BackgroundService
 {
@@ -121,6 +126,14 @@ public sealed class WhatsAppCommandHostedService(
         {
             Ignore(row, "Limite de comandos por minuto excedido.");
             return;
+        }
+
+        string? heard = null;
+        if (row.Kind == WhatsAppMessageKind.Audio)
+        {
+            heard = await TranscribeAsync(row, settings, ct);
+            if (heard == null)
+                return; // the row already carries the outcome and the sender was answered
         }
 
         var last = await commands.GetLastProcessedBySenderAsync(row.SenderNumber, ct);
@@ -261,20 +274,114 @@ public sealed class WhatsAppCommandHostedService(
             !(await settingsRepository.GetAlertSettingsAsync(matches[0].TenantId, AlertChannel.WhatsApp, ct)).Enabled)
             reply += $"\n\n{CommandReplyText.ChannelOffNote}";
 
+        if (heard != null)
+            reply = CommandReplyText.Heard(heard) + reply;
+        if (await ReplyAsync(row, settings, reply, status, ct))
+            logger.LogInformation("WhatsApp command {Id} from {Sender}: {Intent} ({Source}), {Rules} rule(s).",
+                row.Id, row.SenderNumber, row.Intent, row.IntentSource, row.TriggersAffected);
+    }
+
+    /// <summary>Sends the reply and marks the row; false when Evolution refused (the command itself already ran).</summary>
+    private async Task<bool> ReplyAsync(WhatsAppCommandLog row, SystemSettings settings, string reply,
+        WhatsAppCommandStatus status, CancellationToken ct)
+    {
         row.ReplyText = reply;
         var sent = await evolution.SendTextAsync(settings, row.SenderNumber, reply, ct);
         if (sent.Success)
         {
             row.Status = status;
-            logger.LogInformation("WhatsApp command {Id} from {Sender}: {Intent} ({Source}), {Rules} rule(s).",
-                row.Id, row.SenderNumber, row.Intent, row.IntentSource, row.TriggersAffected);
+            return true;
         }
-        else
+        row.Status = WhatsAppCommandStatus.Failed;
+        row.Detail = Truncate($"Resposta não enviada: {sent.Error}");
+        logger.LogWarning("WhatsApp reply to {Sender} failed: {Error}", row.SenderNumber, sent.Error);
+        return false;
+    }
+
+    /// <summary>
+    /// Turns the voice note into row.Text. Null means the message was answered here
+    /// (audio disabled, too long, download or transcription failure) and processing
+    /// stops. The audio file is deleted either way — only the text is kept.
+    /// </summary>
+    private async Task<string?> TranscribeAsync(WhatsAppCommandLog row, SystemSettings settings, CancellationToken ct)
+    {
+        var fullPath = row.AudioPath == null ? null : Path.Combine(storage.InboundAudioRoot, row.AudioPath);
+        try
         {
-            // The command itself ran; only the confirmation failed.
-            row.Status = WhatsAppCommandStatus.Failed;
-            row.Detail = Truncate($"Resposta não enviada: {sent.Error}");
-            logger.LogWarning("WhatsApp reply to {Sender} failed: {Error}", row.SenderNumber, sent.Error);
+            if (!settings.WhatsAppAudioEnabled)
+            {
+                row.Detail = "Comandos por áudio desativados.";
+                await ReplyAsync(row, settings, CommandReplyText.AudioDisabled(), WhatsAppCommandStatus.Done, ct);
+                return null;
+            }
+
+            var maxSeconds = Math.Max(5, settings.WhatsAppAudioMaxSeconds);
+            if (row.AudioSeconds is { } seconds && seconds > maxSeconds)
+            {
+                row.Detail = $"Áudio de {seconds} s excede o máximo de {maxSeconds} s.";
+                await ReplyAsync(row, settings, CommandReplyText.AudioTooLong(maxSeconds), WhatsAppCommandStatus.Done, ct);
+                return null;
+            }
+
+            byte[]? audio = null;
+            var mimeType = row.AudioMimeType ?? "audio/ogg";
+            if (fullPath != null && File.Exists(fullPath))
+            {
+                audio = await File.ReadAllBytesAsync(fullPath, ct);
+            }
+            else
+            {
+                var media = await evolution.GetMediaBase64Async(settings, row.SenderJid, row.MessageId, ct);
+                if (media.Success)
+                {
+                    audio = media.Bytes;
+                    mimeType = media.MimeType ?? mimeType;
+                }
+                else
+                {
+                    row.Detail = Truncate($"Áudio não obtido: {media.Error}");
+                }
+            }
+            if (audio == null || audio.Length == 0)
+            {
+                await ReplyAsync(row, settings, CommandReplyText.AudioNotUnderstood(), WhatsAppCommandStatus.Failed, ct);
+                row.Status = WhatsAppCommandStatus.Failed;
+                return null;
+            }
+
+            var started = DateTime.Now;
+            var result = await speechToText.TranscribeAsync(settings,
+                new SpeechToTextRequest(audio, mimeType, "voice" + (Path.GetExtension(fullPath) is { Length: > 0 } ext ? ext : ".ogg"),
+                    string.IsNullOrWhiteSpace(settings.WhisperLanguage) ? null : settings.WhisperLanguage), ct);
+            if (!result.Success || string.IsNullOrWhiteSpace(result.Text))
+            {
+                row.Detail = Truncate(result.Error ?? "Nenhuma fala reconhecida no áudio.");
+                logger.LogWarning("Voice note {Id} from {Sender} not transcribed: {Error}", row.Id, row.SenderNumber, row.Detail);
+                await ReplyAsync(row, settings, CommandReplyText.AudioNotUnderstood(), WhatsAppCommandStatus.Failed, ct);
+                row.Status = WhatsAppCommandStatus.Failed;
+                return null;
+            }
+
+            var transcript = result.Text.Length > 1000 ? result.Text[..1000] : result.Text;
+            row.Text = transcript;
+            row.Detail = $"Transcrito em {(DateTime.Now - started).TotalSeconds:0.0} s";
+            return transcript;
+        }
+        finally
+        {
+            if (fullPath != null)
+            {
+                try
+                {
+                    if (File.Exists(fullPath))
+                        File.Delete(fullPath);
+                    row.AudioPath = null;
+                }
+                catch (IOException ex)
+                {
+                    logger.LogWarning(ex, "Could not delete voice note {Path}.", fullPath);
+                }
+            }
         }
     }
 
