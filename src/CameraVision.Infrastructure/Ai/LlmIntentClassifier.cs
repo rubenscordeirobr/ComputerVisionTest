@@ -67,18 +67,25 @@ public sealed class LlmIntentClassifier(IEnumerable<ILlmClient> clients, ILogger
     private static string SystemPrompt(DateTime now, bool expectingDuration) =>
         $$"""
          You classify one WhatsApp message (Brazilian Portuguese) sent by a customer of a
-         security-camera service to its assistant. The assistant can only do two things:
-         enable temporary capture alerts for the sender, or disable them.
+         security-camera service to its assistant. The assistant can do four things:
+         enable temporary capture alerts for the sender, disable them, report the
+         status of the cameras and of the detection worker, or list the latest captures
+         (optionally of one object class).
          Current local date and time: {{now:yyyy-MM-dd HH:mm}} ({{now:dddd}}).
          {{(expectingDuration ? "The assistant just asked the sender \"até quando?\" (until when the alerts should stay on); a message that only states a validity is intent \"set_duration\"." : "")}}
          Reply with a single JSON object and nothing else:
-         {"intent": "enable" | "disable" | "set_duration" | "unknown",
+         {"intent": "enable" | "disable" | "set_duration" | "camera_status" | "list_captures" | "unknown",
            "until": "yyyy-MM-ddTHH:mm" | null,
-           "until_disabled": true | false}
+           "until_disabled": true | false,
+           "count": integer | null,
+           "object_class": "<COCO class name in English, e.g. person, cat, dog, car>" | null}
          "until" is the requested end of the alerts when the message states one (resolve
          relative expressions such as "2 horas" or "até as 22h" against the current time);
          "until_disabled" is true when the sender wants them on until further notice.
-         Greetings, questions, or anything else are "unknown". Never invent a validity.
+         "count" and "object_class" only apply to list_captures: the number of captures asked
+         for (null when not stated) and the object mentioned (null when none or unknown).
+         Greetings, questions about anything else, or unclear requests are "unknown".
+         Never invent a validity, a count or a class.
          """;
 
     /// <summary>Lenient: strips code fences, takes the outermost object, ignores unknown fields.</summary>
@@ -101,10 +108,28 @@ public sealed class LlmIntentClassifier(IEnumerable<ILlmClient> clients, ILogger
                 "enable" => CommandIntent.EnableAlerts,
                 "disable" => CommandIntent.DisableAlerts,
                 "set_duration" => CommandIntent.SetDuration,
+                "camera_status" => CommandIntent.CameraStatus,
+                "list_captures" => CommandIntent.ListCaptures,
                 _ => CommandIntent.Unknown,
             };
             if (kind == CommandIntent.Unknown)
                 return CommandInterpretation.Unknown("llm");
+            if (kind == CommandIntent.CameraStatus)
+                return new CommandInterpretation(kind, Source: "llm");
+            if (kind == CommandIntent.ListCaptures)
+            {
+                int? count = root.TryGetProperty("count", out var c) && c.ValueKind == JsonValueKind.Number &&
+                             c.TryGetInt32(out var n) && n > 0
+                    ? n
+                    : null;
+                var rawClass = root.TryGetProperty("object_class", out var oc) && oc.ValueKind == JsonValueKind.String
+                    ? oc.GetString()?.Trim()
+                    : null;
+                var objectClass = DetectableClassResolver.TryResolve(rawClass);
+                var unknownClass = objectClass == null && !string.IsNullOrWhiteSpace(rawClass) ? rawClass : null;
+                return new CommandInterpretation(kind, Source: "llm", Count: count, ObjectClass: objectClass,
+                    UnknownClass: unknownClass);
+            }
 
             var untilDisabled = root.TryGetProperty("until_disabled", out var u) && u.ValueKind == JsonValueKind.True;
             DateTime? until = null;
