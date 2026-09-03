@@ -92,9 +92,52 @@ services:
     volumes:
       - evolution_redis:/data
 
+  # Speech-to-text for WhatsApp voice commands (SPEC-19): OpenAI-compatible
+  # POST /v1/audio/transcriptions on port 9000. GPU by default (needs the NVIDIA
+  # Container Toolkit / Docker Desktop WSL2 GPU support). To run on CPU instead:
+  #   docker compose stop whisper && docker compose --profile whisper-cpu up -d whisper-cpu
+  # WHISPER_API_KEY must match "Chave" under Sistema → Inteligência artificial.
+  whisper:
+    image: hwdsl2/whisper-server:cuda
+    container_name: whisper
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - WHISPER_MODEL=large-v3-turbo
+      - WHISPER_LANGUAGE=pt
+      - WHISPER_DEVICE=cuda
+      - WHISPER_API_KEY=cameravision-whisper-key
+    volumes:
+      - whisper_data:/var/lib/whisper
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  whisper-cpu:
+    image: hwdsl2/whisper-server:latest
+    container_name: whisper-cpu
+    restart: unless-stopped
+    profiles: [whisper-cpu]
+    ports:
+      - "9000:9000"
+    environment:
+      - WHISPER_MODEL=small
+      - WHISPER_LANGUAGE=pt
+      - WHISPER_DEVICE=cpu
+      - WHISPER_THREADS=4
+      - WHISPER_API_KEY=cameravision-whisper-key
+    volumes:
+      - whisper_data:/var/lib/whisper
+
 volumes:
   caddy_data:
   caddy_config:
   evolution_instances:
   evolution_postgres:
   evolution_redis:
+  whisper_data:

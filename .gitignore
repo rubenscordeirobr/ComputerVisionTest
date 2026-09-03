@@ -3,6 +3,7 @@ obj/
 output/
 data/database.db*
 data/keys/
+data/inbound-audio/
 cuda-runtime/
 models/*.pt
 models/*.onnx
