@@ -96,9 +96,9 @@
             <MudTd Style="text-align:right; white-space: nowrap;">
                 <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Primary"
                                OnClick="@(() => PlayAsync(context))" aria-label="Reproduzir" />
-                <MudTooltip Text="Alertas enviados">
+                <MudTooltip Text="Notificações">
                     <MudIconButton Icon="@Icons.Material.Filled.NotificationsActive" Size="Size.Small"
-                                   OnClick="@(() => ShowAlertLogsAsync(context))" aria-label="Alertas" />
+                                   OnClick="@(() => ShowDeliveriesAsync(context))" aria-label="Notificações" />
                 </MudTooltip>
                 <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small"
                                Href="@MediaUrl(context.FilePath)" download="@FileNameOf(context)"
@@ -211,13 +211,13 @@
             new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true });
     }
 
-    private async Task ShowAlertLogsAsync(Capture capture)
+    private async Task ShowDeliveriesAsync(Capture capture)
     {
-        var parameters = new DialogParameters<CaptureAlertLogsDialog>
+        var parameters = new DialogParameters<AlertDeliveriesDialog>
         {
             { d => d.Capture, capture },
         };
-        await DialogService.ShowAsync<CaptureAlertLogsDialog>("Alertas da captura", parameters,
+        await DialogService.ShowAsync<AlertDeliveriesDialog>("Notificações da captura", parameters,
             new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true });
     }
 

@@ -1,0 +1,95 @@
+@inject IAlertDeliveryRepository DeliveryRepo
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            var pending = _entries.Count(e => e.Delivery.Status == AlertDeliveryStatus.Pending);
+            @if (pending > 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    @pending notificação(ões) na fila — o site envia em até 10 segundos, ou ao fim do
+                    intervalo de agrupamento da regra.
+                </MudAlert>
+            }
+            @if (_entries.Count == 0)
+            {
+                <MudText Class="mud-text-secondary">Nenhuma notificação registrada para esta captura.</MudText>
+            }
+            else
+            {
+                <MudTable Items="_entries" Dense="true" Hover="true">
+                    <HeaderContent>
+                        <MudTh>Hora</MudTh>
+                        <MudTh>Canal</MudTh>
+                        <MudTh>Destinatário</MudTh>
+                        <MudTh>Regra</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Detalhe</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Hora">@((context.Delivery.SentAt ?? context.Delivery.QueuedAt).ToString("dd/MM/yyyy HH:mm:ss"))</MudTd>
+                        <MudTd DataLabel="Canal">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                                     Color="@ChannelUi.ChannelColor(context.Delivery.Channel)"
+                                     Icon="@ChannelUi.Icon(context.Delivery.Channel)">
+                                @ChannelUi.Label(context.Delivery.Channel)
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Destinatário" Style="word-break: break-all;">@RecipientText(context)</MudTd>
+                        <MudTd DataLabel="Regra">@context.RuleName</MudTd>
+                        <MudTd DataLabel="Status">
+                            @switch (context.Delivery.Status)
+                            {
+                                case AlertDeliveryStatus.Pending:
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled">Na fila</MudChip>
+                                    break;
+                                case AlertDeliveryStatus.Sent:
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Enviado</MudChip>
+                                    break;
+                                default:
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Falhou</MudChip>
+                                    break;
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Detalhe">@(context.Delivery.ErrorMessage ?? "—")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="Close">Fechar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Capture Capture { get; set; } = new();
+
+    private IReadOnlyList<AlertDeliveryEntry> _entries = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _entries = await DeliveryRepo.GetByCaptureAsync(Capture.Id);
+        _loading = false;
+    }
+
+    private static string RecipientText(AlertDeliveryEntry entry)
+    {
+        var address = entry.Delivery.Recipient;
+        if (entry.ContactName != null)
+            return address == null ? entry.ContactName : $"{entry.ContactName} ({address})";
+        return address ?? "—";
+    }
+
+    private void Close() => MudDialog.Close();
+}
