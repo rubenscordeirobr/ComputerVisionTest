@@ -6,4 +6,7 @@
     <Project Path="src/CameraVision.Api/CameraVision.Api.csproj" />
     <Project Path="src/CameraVision.Web/CameraVision.Web.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CameraVision.Core.Tests/CameraVision.Core.Tests.csproj" />
+  </Folder>
 </Solution>
