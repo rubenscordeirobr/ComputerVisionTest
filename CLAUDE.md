@@ -51,7 +51,14 @@ Solution `ComputerVisionTest.slnx` (central package management via
   settings), `rubens.cordeiro@live.com.br`/`test` is the first tenant's admin.
   System settings are one page per concern under the *Sistema* nav group
   (`/system/smtp`, `/system/application`, `/system/whatsapp`,
-  `/system/alerts`). `WorkerHealthMonitor` tracks worker liveness (SPEC-15):
+  `/system/alerts`, `/system/ai`). **WhatsApp command agent** (SPEC-17): a
+  contact texts "ativar/desativar alertas" to the paired number; the API's
+  `POST /api/whatsapp/webhook` (Evolution `MESSAGES_UPSERT`, `X-Webhook-Key`)
+  stores a `WhatsAppCommandLog`, and `WhatsAppCommandHostedService` (web, 2 s)
+  classifies it (`CommandTextRules` keyword rules, then the LLM configured on
+  `/system/ai` — Gemini / Claude / DeepSeek via `ILlmClient`) and starts/ends
+  the sender's own temporary notice through the shared
+  `TemporaryNoticeService` (Core), replying via Evolution. `WorkerHealthMonitor` tracks worker liveness (SPEC-15):
   stale worker reports (>35 s) show "Sem processamento"/banners, and worker
   down/recovery fires critical admin alerts (own e-mail/WhatsApp recipients in
   `AdminAlertSettings`, history in `SystemAlertEvents`).

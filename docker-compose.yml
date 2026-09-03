@@ -35,6 +35,10 @@ services:
   # WhatsApp gateway (unofficial API via Baileys). The web app pairs a number by
   # QR code on the Sistema page; alerts are sent through POST /message/send*.
   # AUTHENTICATION_API_KEY must match the "API Key" field in system settings.
+  # Inbound messages (the command agent, SPEC-17) use a per-instance webhook
+  # registered from the same page ("Registrar webhook"), pointing at the API on
+  # this host: http://host.docker.internal:5220/api/whatsapp/webhook. No
+  # WEBHOOK_GLOBAL_* variables are needed.
   evolution-api:
     image: evoapicloud/evolution-api:v2.3.7
     container_name: evolution-api

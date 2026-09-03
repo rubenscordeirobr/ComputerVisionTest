@@ -244,14 +244,35 @@ Pairing (SuperAdmin, one number for the whole system):
    Dispositivos conectados → Conectar dispositivo). The page polls the
    connection state and refreshes the QR every 40 s until it shows
    **Conectado**.
-3. Add recipient numbers (`+5549999999999`) in **Alertas → WhatsApp**, enable
-   the channel, and tick *WhatsApp* on the capture rules / health alerts that
-   should use it.
+3. Register the numbers (`+5549999999999`) as contacts in **Contatos**, enable
+   the channel in **Alertas → WhatsApp**, and pick the contacts in the rules'
+   *Notificações* / the health-alert flag.
 
 The session survives container restarts (`DEL_INSTANCE=false`, instance state
 in Postgres). Because this is not the official WhatsApp Business API, use a
 dedicated number — numbers sending automated messages this way can be banned
 by WhatsApp.
+
+### Command agent ("ativar / desativar alertas")
+
+A registered contact can text the paired number to start or end its own
+temporary notice (SPEC-17) — "Você poderia ativar os alertas?", "ativar
+alertas por 2 horas", "desativar alertas". Setup (SuperAdmin):
+
+1. **Sistema → WhatsApp**, section *Agente de comandos*: switch it on, keep
+   the webhook URL `http://host.docker.internal:5220/api/whatsapp/webhook`
+   (the API as seen from the Evolution container), click **Gerar segredo**
+   and **Registrar webhook**. The chip must read *Webhook registrado*; the
+   table below lists every received message with its outcome.
+2. Optionally **Sistema → Inteligência artificial**: pick Gemini, Claude or
+   DeepSeek, a model and an API key so free-form phrasings are understood.
+   Without it only the keyword rules run. *Teste de interpretação* shows how
+   a message would be read.
+
+An "ativar" without an end is activated for the default hours (8) and the
+agent asks "Até quando?" — reply "2 horas", "até as 22h", "até amanhã" or "até
+eu desativar" within 10 minutes. Messages from unknown numbers, groups and
+media are ignored (no reply); the notice is capped at 72 h.
 
 ## HTTPS (Caddy)
 
