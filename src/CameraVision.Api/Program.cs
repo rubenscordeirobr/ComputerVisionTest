@@ -94,6 +94,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 app.MapProcessorEndpoints();
+app.MapWhatsAppWebhookEndpoints();
 
 app.Run();
 
