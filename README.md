@@ -280,6 +280,24 @@ line per camera (Online / Offline / Sem processamento…), and **"últimas 5
 capturas de pessoas"** (default 5, max 10; "de gatos", "de carros"… or no
 object) returns the latest captures with their watch links.
 
+**Voice notes** (SPEC-19) work for every command: the audio is transcribed by
+the local Whisper server and the text reply starts with 🎤 *Entendi: "…"*.
+Setup:
+
+1. `docker compose up -d whisper` starts `hwdsl2/whisper-server:cuda`
+   (model `large-v3-turbo`, Portuguese, GPU — needs the NVIDIA Container
+   Toolkit / Docker Desktop WSL2 GPU support; the first start downloads the
+   model). Without a usable GPU run the CPU variant instead:
+   `docker compose stop whisper && docker compose --profile whisper-cpu up -d whisper-cpu`
+   (model `small`). Both listen on port 9000 and share the model volume.
+2. **Sistema → Inteligência artificial → Transcrição de áudio**: keep the URL
+   `http://localhost:9000` and the key (`WHISPER_API_KEY` in
+   `docker-compose.yml`), click **Testar Whisper**.
+3. **Sistema → WhatsApp → Registrar webhook** once more — the webhook must be
+   registered with media inline (`webhookBase64`), otherwise the chip says
+   *Webhook sem áudio*. Voice notes longer than the configured maximum
+   (60 s) are refused; the audio file is deleted right after transcription.
+
 ## HTTPS (Caddy)
 
 The same `docker compose up -d` also starts a Caddy reverse proxy that

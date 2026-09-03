@@ -61,7 +61,12 @@ Solution `ComputerVisionTest.slnx` (central package management via
   `TemporaryNoticeService` (Core), replying via Evolution. SPEC-18 adds the
   read-only "status" (worker + per-camera health, `CameraStatusReport`) and
   "últimas N capturas de X" (`CaptureListReport`, tokenized watch links,
-  `DetectableClassResolver` for PT-BR object words) answers. `WorkerHealthMonitor` tracks worker liveness (SPEC-15):
+  `DetectableClassResolver` for PT-BR object words) answers. SPEC-19: voice
+  notes arrive inline (`webhookBase64`), are stored under `data/inbound-audio`
+  and transcribed by `ISpeechToTextClient` → `WhisperSpeechToTextClient`
+  (docker-compose `whisper` / `whisper-cpu`, port 9000, settings on
+  `/system/ai`) before the same text pipeline; replies quote the transcript.
+  `WorkerHealthMonitor` tracks worker liveness (SPEC-15):
   stale worker reports (>35 s) show "Sem processamento"/banners, and worker
   down/recovery fires critical admin alerts (own e-mail/WhatsApp recipients in
   `AdminAlertSettings`, history in `SystemAlertEvents`).

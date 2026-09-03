@@ -10,7 +10,8 @@ keyword rules miss — and the model, provider and key are a system setting.
 
 Scope: enable / disable the sender's own WhatsApp notices, plus the "até quando?"
 follow-up. The intent set is an enum so more commands can be added later — SPEC-18
-adds the read-only "status" and "últimas N capturas" reports.
+adds the read-only "status" and "últimas N capturas" reports, SPEC-19 voice notes
+(Whisper transcription in front of the same pipeline).
 
 ## Flow
 
