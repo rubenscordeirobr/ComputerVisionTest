@@ -1,8 +1,13 @@
 using System.Text.Json;
+using CameraVision.Core.Entities;
 
 namespace CameraVision.Core.WhatsApp;
 
-/// <summary>A text message received by the Evolution instance from one person (never a group).</summary>
+/// <summary>
+/// A message received by the Evolution instance from one person (never a group): a
+/// text, or a voice note (Kind = Audio) whose bytes come inline as base64 when the
+/// webhook was registered with webhookBase64 (AudioBase64 null = fetch it later).
+/// </summary>
 public sealed record WhatsAppInboundMessage(
     string MessageId,
     string SenderJid,
@@ -10,14 +15,18 @@ public sealed record WhatsAppInboundMessage(
     string? PushName,
     string Text,
     DateTime MessageAt,
-    string? Instance)
+    string? Instance,
+    WhatsAppMessageKind Kind = WhatsAppMessageKind.Text,
+    string? AudioBase64 = null,
+    string? AudioMimeType = null,
+    int? AudioSeconds = null)
 {
     private const string PersonJidSuffix = "@s.whatsapp.net";
 
     /// <summary>
     /// Reads an Evolution API MESSAGES_UPSERT payload. False with a PT-BR reason for
     /// anything the agent must not act on: other events, our own messages, groups,
-    /// broadcasts, non-text messages.
+    /// broadcasts, images/videos/stickers/reactions.
     /// </summary>
     public static bool TryParse(JsonElement payload, out WhatsAppInboundMessage? message, out string reason)
     {
@@ -78,26 +87,6 @@ public sealed record WhatsAppInboundMessage(
             return false;
         }
 
-        string? text = null;
-        if (TryGetObject(data, "message", out var body))
-        {
-            text = GetString(body, "conversation");
-            if (string.IsNullOrWhiteSpace(text) && TryGetObject(body, "extendedTextMessage", out var extended))
-                text = GetString(extended, "text");
-            if (string.IsNullOrWhiteSpace(text) && TryGetObject(body, "ephemeralMessage", out var ephemeral) &&
-                TryGetObject(ephemeral, "message", out var inner))
-            {
-                text = GetString(inner, "conversation");
-                if (string.IsNullOrWhiteSpace(text) && TryGetObject(inner, "extendedTextMessage", out var innerExtended))
-                    text = GetString(innerExtended, "text");
-            }
-        }
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            reason = "Mensagem sem texto (mídia, áudio ou reação).";
-            return false;
-        }
-
         var messageAt = DateTime.Now;
         if (data.TryGetProperty("messageTimestamp", out var stamp))
         {
@@ -110,9 +99,47 @@ public sealed record WhatsAppInboundMessage(
                 messageAt = DateTimeOffset.FromUnixTimeSeconds(seconds).LocalDateTime;
         }
 
-        message = new WhatsAppInboundMessage(messageId.Trim(), senderJid, digits, GetString(data, "pushName"),
-            text.Trim(), messageAt, GetString(payload, "instance"));
-        return true;
+        var pushName = GetString(data, "pushName");
+        var instance = GetString(payload, "instance");
+
+        if (!TryGetObject(data, "message", out var body))
+        {
+            reason = "Mensagem sem conteúdo.";
+            return false;
+        }
+
+        // Disappearing messages wrap the real content one level down.
+        var content = TryGetObject(body, "ephemeralMessage", out var ephemeral) &&
+                      TryGetObject(ephemeral, "message", out var inner)
+            ? inner
+            : body;
+
+        var text = GetString(content, "conversation");
+        if (string.IsNullOrWhiteSpace(text) && TryGetObject(content, "extendedTextMessage", out var extended))
+            text = GetString(extended, "text");
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            message = new WhatsAppInboundMessage(messageId.Trim(), senderJid, digits, pushName, text.Trim(),
+                messageAt, instance);
+            return true;
+        }
+
+        if (TryGetObject(content, "audioMessage", out var audio))
+        {
+            // Evolution puts the decoded file next to the message when webhookBase64 is on.
+            var base64 = GetString(body, "base64") ?? GetString(data, "base64");
+            int? duration = audio.TryGetProperty("seconds", out var secs) && secs.ValueKind == JsonValueKind.Number &&
+                            secs.TryGetInt32(out var s)
+                ? s
+                : null;
+            message = new WhatsAppInboundMessage(messageId.Trim(), senderJid, digits, pushName, "", messageAt, instance,
+                WhatsAppMessageKind.Audio, string.IsNullOrWhiteSpace(base64) ? null : base64,
+                GetString(audio, "mimetype") ?? "audio/ogg", duration);
+            return true;
+        }
+
+        reason = "Mensagem sem texto nem áudio (imagem, vídeo, figurinha ou reação).";
+        return false;
     }
 
     private static bool TryGetObject(JsonElement element, string name, out JsonElement value)

@@ -47,4 +47,12 @@ public class SystemSettings
     public int WhatsAppBotDefaultHours { get; set; } = 8;
     public string WhatsAppWebhookUrl { get; set; } = "http://host.docker.internal:5220/api/whatsapp/webhook";
     public string WhatsAppWebhookSecret { get; set; } = "";
+
+    // Voice commands (SPEC-19): voice notes are transcribed by a local Whisper server
+    // (docker-compose service "whisper", OpenAI-compatible API) before interpretation.
+    public bool WhatsAppAudioEnabled { get; set; } = true;
+    public string WhisperBaseUrl { get; set; } = "http://localhost:9000";
+    public string WhisperApiKey { get; set; } = "cameravision-whisper-key";
+    public string WhisperLanguage { get; set; } = "pt";
+    public int WhatsAppAudioMaxSeconds { get; set; } = 60;
 }

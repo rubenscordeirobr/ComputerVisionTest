@@ -13,6 +13,14 @@ public enum WhatsAppCommandStatus
     Failed = 4,
 }
 
+public enum WhatsAppMessageKind
+{
+    Text = 0,
+
+    /// <summary>A voice note; Text holds the transcript once Whisper has run (SPEC-19).</summary>
+    Audio = 1,
+}
+
 /// <summary>
 /// One inbound WhatsApp message handled by the command agent (SPEC-17): the webhook
 /// stores it, the web app's hosted service interprets and answers it. The row is
@@ -31,7 +39,17 @@ public class WhatsAppCommandLog
     public string SenderNumber { get; set; } = "";
 
     public string? PushName { get; set; }
+
+    /// <summary>The message text, or the transcript of a voice note (empty until transcribed).</summary>
     public string Text { get; set; } = "";
+
+    public WhatsAppMessageKind Kind { get; set; } = WhatsAppMessageKind.Text;
+
+    /// <summary>Voice note file, relative to the inbound-audio root; null once deleted or when never received inline.</summary>
+    public string? AudioPath { get; set; }
+
+    public string? AudioMimeType { get; set; }
+    public int? AudioSeconds { get; set; }
     public DateTime MessageAt { get; set; }
     public DateTime ReceivedAt { get; set; } = DateTime.Now;
 

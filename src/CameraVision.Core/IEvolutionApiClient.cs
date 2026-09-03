@@ -18,8 +18,11 @@ public sealed record EvolutionState(EvolutionConnection Connection, string? Erro
 /// <summary>Outcome of a message send. Error is PT-BR, suitable for logs and UI.</summary>
 public sealed record EvolutionSendResult(bool Success, string? Error = null);
 
-/// <summary>Webhook registered on the instance (GET webhook/find). Error is PT-BR.</summary>
-public sealed record EvolutionWebhookState(bool Enabled, string? Url, string? Error = null);
+/// <summary>Webhook registered on the instance (GET webhook/find). Base64 = media arrives inline. Error is PT-BR.</summary>
+public sealed record EvolutionWebhookState(bool Enabled, string? Url, string? Error = null, bool Base64 = false);
+
+/// <summary>A media file downloaded through the instance (POST chat/getBase64FromMediaMessage).</summary>
+public sealed record EvolutionMediaResult(bool Success, byte[]? Bytes = null, string? MimeType = null, string? Error = null);
 
 /// <summary>
 /// Minimal Evolution API client for the WhatsApp pairing flow (connect → QR → state)
@@ -43,4 +46,8 @@ public interface IEvolutionApiClient
         CancellationToken ct = default);
 
     Task<EvolutionWebhookState> GetWebhookAsync(SystemSettings settings, CancellationToken ct = default);
+
+    /// <summary>Downloads a received media message (fallback when the webhook did not carry it inline).</summary>
+    Task<EvolutionMediaResult> GetMediaBase64Async(SystemSettings settings, string remoteJid, string messageId,
+        CancellationToken ct = default);
 }
