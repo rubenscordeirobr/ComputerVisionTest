@@ -34,18 +34,5 @@ public class Capture
     public long FileSizeBytes { get; set; }
     public DateTime IndexedAt { get; set; }
 
-    /// <summary>Set when the capture matched alert rules and waits for the grouped summary.</summary>
-    public DateTime? AlertQueuedAt { get; set; }
-
-    /// <summary>Set when an alert (individual or grouped) was dispatched for this capture.</summary>
-    public DateTime? AlertSentAt { get; set; }
-
-    /// <summary>Channels resolved at rule-match time (comma-separated AlertChannel names).</summary>
-    public string? AlertChannels { get; set; }
-
-    /// <summary>First rule that matched at rule-match time; nulled if that rule is deleted.
-    /// Lets the grouped digest attribute its alert-log rows to a rule.</summary>
-    public int? AlertRuleId { get; set; }
-
     public TimeSpan Duration => EndedAt - StartedAt;
 }

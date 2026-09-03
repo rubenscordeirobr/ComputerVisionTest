@@ -4,7 +4,7 @@ namespace CameraVision.Core.Repositories;
 
 public interface ISettingsRepository
 {
-    /// <summary>One tenant's channel settings; a transient default (empty recipients) when unset.</summary>
+    /// <summary>One tenant's channel master switch; a transient default (disabled) when unset.</summary>
     Task<AlertSettings> GetAlertSettingsAsync(int tenantId, AlertChannel channel, CancellationToken ct = default);
 
     Task SaveAlertSettingsAsync(AlertSettings settings, CancellationToken ct = default);
@@ -17,9 +17,4 @@ public interface ISettingsRepository
 
     Task<AdminAlertSettings> GetAdminAlertSettingsAsync(CancellationToken ct = default);
     Task SaveAdminAlertSettingsAsync(AdminAlertSettings settings, CancellationToken ct = default);
-
-    /// <summary>One tenant's antiflood grouping settings; a transient default when unset.</summary>
-    Task<CaptureAlertSettings> GetCaptureAlertSettingsAsync(int tenantId, CancellationToken ct = default);
-
-    Task SaveCaptureAlertSettingsAsync(CaptureAlertSettings settings, CancellationToken ct = default);
 }

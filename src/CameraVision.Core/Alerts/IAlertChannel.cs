@@ -13,20 +13,21 @@ public sealed record AlertMessage(
     string? InlineImagePath = null);
 
 /// <summary>
-/// One alert delivery mechanism. Email is implemented; WhatsApp is a stub —
-/// a future implementation replaces the stub without touching the callers.
+/// One delivery mechanism (e-mail via SMTP, WhatsApp via the Evolution API). The
+/// recipients are passed explicitly; whether a channel is enabled for a tenant is
+/// the caller's decision.
 /// </summary>
 public interface IAlertChannel
 {
     AlertChannel Channel { get; }
 
-    /// <summary>Returns true when the message was actually delivered.</summary>
-    Task<bool> TrySendAsync(AlertMessage message, AlertSettings settings, SystemSettings system,
+    /// <summary>Returns true when the message was delivered to at least one recipient.</summary>
+    Task<bool> TrySendAsync(AlertMessage message, IReadOnlyList<string> recipients, SystemSettings system,
         CancellationToken ct = default);
 }
 
 public interface IAlertDispatcher
 {
-    /// <summary>Evaluates capture rules for freshly imported captures. Never throws.</summary>
+    /// <summary>Evaluates capture rules for freshly imported captures and queues deliveries. Never throws.</summary>
     Task DispatchAsync(IReadOnlyList<Capture> newCaptures, CancellationToken ct = default);
 }

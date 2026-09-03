@@ -15,9 +15,4 @@ public interface ICaptureRepository
     Task<IReadOnlyList<string>> GetDistinctCameraNamesAsync(int? tenantId = null, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetDistinctClassesAsync(int? tenantId = null, CancellationToken ct = default);
     Task<int> CountAsync(DateTime? startedAtOrAfter = null, int? tenantId = null, CancellationToken ct = default);
-
-    /// <summary>Captures queued for the grouped alert summary (all tenants), oldest first.</summary>
-    Task<IReadOnlyList<Capture>> GetPendingAlertsAsync(int take, CancellationToken ct = default);
-
-    Task MarkAlertsSentAsync(IEnumerable<int> ids, DateTime sentAt, CancellationToken ct = default);
 }

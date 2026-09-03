@@ -7,9 +7,9 @@ public enum AlertChannel
 }
 
 /// <summary>
-/// Per-tenant, per-channel delivery configuration (one row per tenant+channel):
-/// master switch + recipients. What triggers an alert is decided by the capture
-/// rules (CaptureRule) and the health-alert settings — not here.
+/// Per-tenant, per-channel master switch (one row per tenant+channel). Who receives
+/// what is decided elsewhere: capture-rule notifications pick contacts (AlertTrigger)
+/// and camera-health alerts go to the contacts flagged for them (Contact).
 /// </summary>
 public class AlertSettings
 {
@@ -17,7 +17,4 @@ public class AlertSettings
     public int TenantId { get; set; }
     public AlertChannel Channel { get; set; }
     public bool Enabled { get; set; }
-
-    /// <summary>Email addresses or phone numbers, depending on the channel.</summary>
-    public List<string> Recipients { get; set; } = [];
 }
