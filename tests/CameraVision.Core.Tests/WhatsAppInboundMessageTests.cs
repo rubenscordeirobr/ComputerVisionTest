@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CameraVision.Core.Entities;
 using CameraVision.Core.WhatsApp;
 
 namespace CameraVision.Core.Tests;
@@ -75,6 +76,75 @@ public class WhatsAppInboundMessageTests
     [Fact]
     public void Missing_id_is_rejected() =>
         Assert.False(WhatsAppInboundMessage.TryParse(Payload(id: null), out _, out _));
+
+    private static JsonElement AudioPayload(string? base64 = "T2dnUwACAAAA", bool ephemeral = false) =>
+        JsonSerializer.SerializeToElement(new
+        {
+            @event = "messages.upsert",
+            instance = "CameraVision",
+            data = new
+            {
+                key = new { remoteJid = "5549988887777@s.whatsapp.net", fromMe = false, id = "AUDIO1" },
+                pushName = "Rubens",
+                message = ephemeral
+                    ? (object)new
+                    {
+                        ephemeralMessage = new
+                        {
+                            message = new { audioMessage = new { mimetype = "audio/ogg; codecs=opus", seconds = 7, ptt = true } },
+                        },
+                        base64,
+                    }
+                    : new { audioMessage = new { mimetype = "audio/ogg; codecs=opus", seconds = 7, ptt = true }, base64 },
+                messageType = "audioMessage",
+                messageTimestamp = 1788000000,
+            },
+        });
+
+    [Fact]
+    public void Voice_note_with_inline_audio()
+    {
+        Assert.True(WhatsAppInboundMessage.TryParse(AudioPayload(), out var message, out _));
+        Assert.NotNull(message);
+        Assert.Equal(WhatsAppMessageKind.Audio, message.Kind);
+        Assert.Equal("", message.Text);
+        Assert.Equal("T2dnUwACAAAA", message.AudioBase64);
+        Assert.Equal("audio/ogg; codecs=opus", message.AudioMimeType);
+        Assert.Equal(7, message.AudioSeconds);
+    }
+
+    [Fact]
+    public void Voice_note_without_inline_audio_is_accepted_for_a_later_download()
+    {
+        Assert.True(WhatsAppInboundMessage.TryParse(AudioPayload(base64: null), out var message, out _));
+        Assert.Equal(WhatsAppMessageKind.Audio, message!.Kind);
+        Assert.Null(message.AudioBase64);
+    }
+
+    [Fact]
+    public void Ephemeral_voice_note_is_unwrapped()
+    {
+        Assert.True(WhatsAppInboundMessage.TryParse(AudioPayload(ephemeral: true), out var message, out _));
+        Assert.Equal(WhatsAppMessageKind.Audio, message!.Kind);
+        Assert.Equal(7, message.AudioSeconds);
+        Assert.Equal("T2dnUwACAAAA", message.AudioBase64);
+    }
+
+    [Fact]
+    public void Image_is_still_rejected()
+    {
+        var payload = JsonSerializer.SerializeToElement(new
+        {
+            @event = "messages.upsert",
+            data = new
+            {
+                key = new { remoteJid = "5549988887777@s.whatsapp.net", fromMe = false, id = "IMG1" },
+                message = new { imageMessage = new { mimetype = "image/jpeg" }, base64 = "abc" },
+            },
+        });
+        Assert.False(WhatsAppInboundMessage.TryParse(payload, out _, out var reason));
+        Assert.Contains("imagem", reason);
+    }
 
     [Fact]
     public void Lid_jid_without_phone_is_rejected() =>
