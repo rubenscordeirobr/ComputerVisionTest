@@ -7,6 +7,15 @@ public enum SmtpSecurity
     SslTls,
 }
 
+/// <summary>LLM provider used by the WhatsApp command agent when the rule-based parser gives up.</summary>
+public enum AiProvider
+{
+    None,
+    Gemini,
+    Claude,
+    DeepSeek,
+}
+
 /// <summary>Singleton row (Id = 1). Secrets are stored in plaintext — known v1 limitation.</summary>
 public class SystemSettings
 {
@@ -26,4 +35,16 @@ public class SystemSettings
     public string EvolutionBaseUrl { get; set; } = "";
     public string EvolutionApiKey { get; set; } = "";
     public string EvolutionInstanceName { get; set; } = "";
+
+    // AI model used to interpret WhatsApp commands (SPEC-17). None = rules only.
+    public AiProvider AiProvider { get; set; } = AiProvider.None;
+    public string AiModel { get; set; } = "";
+    public string AiApiKey { get; set; } = "";
+
+    // WhatsApp command agent: inbound webhook (registered on the Evolution instance)
+    // and the default validity of an "ativar alertas" without an explicit end.
+    public bool WhatsAppBotEnabled { get; set; }
+    public int WhatsAppBotDefaultHours { get; set; } = 8;
+    public string WhatsAppWebhookUrl { get; set; } = "http://host.docker.internal:5220/api/whatsapp/webhook";
+    public string WhatsAppWebhookSecret { get; set; } = "";
 }

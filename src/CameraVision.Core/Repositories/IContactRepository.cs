@@ -18,6 +18,9 @@ public interface IContactRepository
     /// <summary>Deletes the contact and removes it from every trigger that referenced it.</summary>
     Task DeleteAsync(int id, CancellationToken ct = default);
 
+    /// <summary>Contacts (any tenant) whose normalized WhatsApp number is one of <paramref name="candidates"/>.</summary>
+    Task<IReadOnlyList<Contact>> FindByWhatsAppNumberAsync(IReadOnlyCollection<string> candidates, CancellationToken ct = default);
+
     /// <summary>Addresses of the tenant's contacts flagged for camera-health alerts on that channel.</summary>
     Task<IReadOnlyList<string>> GetHealthRecipientsAsync(int tenantId, AlertChannel channel, CancellationToken ct = default);
 }

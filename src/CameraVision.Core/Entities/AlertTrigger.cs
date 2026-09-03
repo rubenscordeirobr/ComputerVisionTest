@@ -86,6 +86,10 @@ public class AlertTrigger
 
     public bool IsExpiredAt(DateTime now) => ExpiresAt is { } until && until <= now;
 
+    /// <summary>A temporary notice currently in force (drives the warning chips and the WhatsApp agent).</summary>
+    public bool IsRunningTemporaryAt(DateTime now) =>
+        Kind == AlertTriggerKind.Temporary && Enabled && IsActiveAt(now);
+
     /// <summary>
     /// Whether the trigger applies at <paramref name="moment"/> (the capture's start).
     /// For windows crossing midnight the day of week is the day the window STARTED:

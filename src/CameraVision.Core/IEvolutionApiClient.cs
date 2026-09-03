@@ -18,6 +18,9 @@ public sealed record EvolutionState(EvolutionConnection Connection, string? Erro
 /// <summary>Outcome of a message send. Error is PT-BR, suitable for logs and UI.</summary>
 public sealed record EvolutionSendResult(bool Success, string? Error = null);
 
+/// <summary>Webhook registered on the instance (GET webhook/find). Error is PT-BR.</summary>
+public sealed record EvolutionWebhookState(bool Enabled, string? Url, string? Error = null);
+
 /// <summary>
 /// Minimal Evolution API client for the WhatsApp pairing flow (connect → QR → state)
 /// and message sending. Never throws — failures come back as Error values.
@@ -34,4 +37,10 @@ public interface IEvolutionApiClient
     /// <summary>Sends an image with a caption (the alert text goes in the caption).</summary>
     Task<EvolutionSendResult> SendImageAsync(SystemSettings settings, string number, string caption,
         byte[] image, string fileName, CancellationToken ct = default);
+
+    /// <summary>Points the instance's MESSAGES_UPSERT webhook at <paramref name="url"/>; <paramref name="secret"/> travels in the X-Webhook-Key header.</summary>
+    Task<EvolutionSendResult> SetWebhookAsync(SystemSettings settings, string url, string secret,
+        CancellationToken ct = default);
+
+    Task<EvolutionWebhookState> GetWebhookAsync(SystemSettings settings, CancellationToken ct = default);
 }
