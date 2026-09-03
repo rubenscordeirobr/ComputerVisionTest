@@ -274,6 +274,12 @@ agent asks "Até quando?" — reply "2 horas", "até as 22h", "até amanhã" or 
 eu desativar" within 10 minutes. Messages from unknown numbers, groups and
 media are ignored (no reply); the notice is capped at 72 h.
 
+Two read-only questions are answered too (SPEC-18): **"status"** (or "como
+estão as câmeras?") returns whether the detection worker is running and one
+line per camera (Online / Offline / Sem processamento…), and **"últimas 5
+capturas de pessoas"** (default 5, max 10; "de gatos", "de carros"… or no
+object) returns the latest captures with their watch links.
+
 ## HTTPS (Caddy)
 
 The same `docker compose up -d` also starts a Caddy reverse proxy that

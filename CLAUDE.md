@@ -58,7 +58,10 @@ Solution `ComputerVisionTest.slnx` (central package management via
   classifies it (`CommandTextRules` keyword rules, then the LLM configured on
   `/system/ai` — Gemini / Claude / DeepSeek via `ILlmClient`) and starts/ends
   the sender's own temporary notice through the shared
-  `TemporaryNoticeService` (Core), replying via Evolution. `WorkerHealthMonitor` tracks worker liveness (SPEC-15):
+  `TemporaryNoticeService` (Core), replying via Evolution. SPEC-18 adds the
+  read-only "status" (worker + per-camera health, `CameraStatusReport`) and
+  "últimas N capturas de X" (`CaptureListReport`, tokenized watch links,
+  `DetectableClassResolver` for PT-BR object words) answers. `WorkerHealthMonitor` tracks worker liveness (SPEC-15):
   stale worker reports (>35 s) show "Sem processamento"/banners, and worker
   down/recovery fires critical admin alerts (own e-mail/WhatsApp recipients in
   `AdminAlertSettings`, history in `SystemAlertEvents`).

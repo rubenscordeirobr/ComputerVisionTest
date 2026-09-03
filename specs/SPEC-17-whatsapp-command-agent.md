@@ -9,7 +9,8 @@ confirmation back. The phrasing is free, so an optional AI model must catch what
 keyword rules miss — and the model, provider and key are a system setting.
 
 Scope: enable / disable the sender's own WhatsApp notices, plus the "até quando?"
-follow-up. The intent set is an enum so more commands can be added later.
+follow-up. The intent set is an enum so more commands can be added later — SPEC-18
+adds the read-only "status" and "últimas N capturas" reports.
 
 ## Flow
 
