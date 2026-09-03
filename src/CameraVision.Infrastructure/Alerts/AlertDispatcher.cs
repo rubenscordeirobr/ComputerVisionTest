@@ -1,5 +1,3 @@
-using System.Net;
-using CameraVision.Core;
 using CameraVision.Core.Alerts;
 using CameraVision.Core.Entities;
 using CameraVision.Core.Repositories;
@@ -8,20 +6,17 @@ using Microsoft.Extensions.Logging;
 namespace CameraVision.Infrastructure.Alerts;
 
 /// <summary>
-/// Evaluates the capture rules for freshly imported captures: every enabled rule
-/// whose classes contain the capture's class contributes its channels; the union
-/// of channels is notified once per capture. Captures older than the recency
-/// window never alert, so importing a historical backlog stays silent. Each
-/// capture is only ever seen here once (the import/ingest is insert-once).
+/// Evaluates the capture rules for freshly imported captures and queues one
+/// AlertDelivery per resolved recipient (see AlertTargetResolver). Nothing is sent
+/// here: the web app's delivery service sends, applying each rule's grouping window.
+/// Captures older than the recency window never alert, so importing a historical
+/// backlog stays silent. Each capture is only ever seen here once (the import/ingest
+/// is insert-once).
 /// </summary>
 public sealed class AlertDispatcher(
-    IEnumerable<IAlertChannel> channels,
     ICaptureRuleRepository ruleRepository,
-    ICaptureRepository captureRepository,
-    ICaptureAlertLogRepository alertLogRepository,
-    ISettingsRepository settingsRepository,
-    CaptureLinkService captureLinks,
-    StoragePaths storage,
+    IContactRepository contactRepository,
+    IAlertDeliveryRepository deliveryRepository,
     ILogger<AlertDispatcher> logger) : IAlertDispatcher
 {
     private static readonly TimeSpan RecencyWindow = TimeSpan.FromMinutes(15);
@@ -51,200 +46,52 @@ public sealed class AlertDispatcher(
         if (recent.Count == 0)
             return;
 
-        var system = await settingsRepository.GetSystemSettingsAsync(ct);
-        // The settings page wins when filled in; otherwise the deployment's
-        // CaptureLinks:PublicBaseUrl from appsettings.json is used.
-        var baseUrl = system.PublicBaseUrl.Trim().TrimEnd('/');
-        if (baseUrl.Length == 0)
-            baseUrl = captureLinks.PublicBaseUrl;
-        if (baseUrl.Length == 0)
-        {
-            baseUrl = "http://localhost:5210";
-            logger.LogWarning("Public base URL not configured — alert links default to {Url}.", baseUrl);
-        }
-
-        // Rules, recipients and antiflood grouping are tenant-scoped: a capture
-        // only matches its own tenant's rules and settings (SPEC-14).
+        // Rules and contacts are tenant-scoped: a capture only matches its own
+        // tenant's rules and contacts (SPEC-14).
         foreach (var tenantCaptures in recent.GroupBy(c => c.TenantId))
-        {
-            await DispatchTenantAsync(tenantCaptures.Key, [.. tenantCaptures],
-                system, baseUrl, ct);
-        }
+            await DispatchTenantAsync(tenantCaptures.Key, [.. tenantCaptures], ct);
     }
 
-    private async Task DispatchTenantAsync(int tenantId, IReadOnlyList<Capture> tenantCaptures,
-        SystemSettings system, string baseUrl, CancellationToken ct)
+    private async Task DispatchTenantAsync(int tenantId, IReadOnlyList<Capture> tenantCaptures, CancellationToken ct)
     {
         var rules = await ruleRepository.GetEnabledAsync(tenantId, ct);
         if (rules.Count == 0)
             return;
-
-        var grouping = await settingsRepository.GetCaptureAlertSettingsAsync(tenantId, ct);
-
-        var channelSettings = new Dictionary<AlertChannel, AlertSettings>();
-        foreach (var channel in channels)
-            channelSettings[channel.Channel] = await settingsRepository.GetAlertSettingsAsync(tenantId, channel.Channel, ct);
+        var contacts = (await contactRepository.GetAllAsync(tenantId, ct)).ToDictionary(c => c.Id);
 
         foreach (var capture in tenantCaptures)
         {
-            var matching = rules
-                .Where(r => r.Classes.Contains(capture.ObjectClass, StringComparer.OrdinalIgnoreCase) &&
-                            r.IsActiveAt(TimeOnly.FromDateTime(capture.StartedAt)))
-                .ToList();
-            if (matching.Count == 0)
-                continue;
-
-            // First rule that requested each channel, for alert-log attribution.
-            var ruleByChannel = new Dictionary<AlertChannel, CaptureRule>();
-            foreach (var rule in matching)
+            var targets = AlertTargetResolver.Resolve(capture, rules, contacts);
+            if (targets.Count == 0)
             {
-                if (rule.NotifyEmail)
-                    ruleByChannel.TryAdd(AlertChannel.Email, rule);
-                if (rule.NotifyWhatsApp)
-                    ruleByChannel.TryAdd(AlertChannel.WhatsApp, rule);
-            }
-            if (ruleByChannel.Count == 0)
-                continue;
-            var wanted = ruleByChannel.Keys.ToHashSet();
-
-            // Channels are resolved now so a rule's time window closing later
-            // cannot drop a queued capture from the grouped summary.
-            capture.AlertChannels = string.Join(",", wanted);
-            capture.AlertRuleId = matching.First(r => r.NotifyEmail || r.NotifyWhatsApp).Id;
-
-            if (grouping.GroupingEnabled)
-            {
-                // Antiflood: no individual message — the web app's digest job sends
-                // one grouped summary per window (CaptureAlertDigestHostedService).
-                capture.AlertQueuedAt = DateTime.Now;
-                await captureRepository.UpdateAsync(capture, ct);
-                logger.LogInformation(
-                    "Capture alert queued for grouped summary: capture {CaptureId} ({Class} @ {Camera}).",
-                    capture.Id, capture.ObjectClass, capture.CameraName);
+                var unresolved = AlertTargetResolver.MatchingRules(capture, rules)
+                    .Where(r => r.Triggers.Any(t => t.IsActiveAt(capture.StartedAt)))
+                    .Select(r => r.Name)
+                    .ToList();
+                if (unresolved.Count > 0)
+                    logger.LogWarning(
+                        "Capture {CaptureId} ({Class} @ {Camera}) matched rule(s) {Rules} but no contact could be resolved — check the contacts' addresses.",
+                        capture.Id, capture.ObjectClass, capture.CameraName, string.Join(", ", unresolved));
                 continue;
             }
 
-            var message = ComposeCaptureMessage(capture, baseUrl);
-            var logs = new List<CaptureAlertLog>();
-
-            foreach (var channel in channels)
+            var now = DateTime.Now;
+            var deliveries = targets.Select(t => new AlertDelivery
             {
-                if (!ruleByChannel.TryGetValue(channel.Channel, out var rule))
-                    continue;
-                var settings = channelSettings[channel.Channel];
+                TenantId = capture.TenantId,
+                CaptureId = capture.Id,
+                CaptureRuleId = t.Rule.Id,
+                Channel = t.Channel,
+                ContactId = t.Contact.Id,
+                Recipient = t.Recipient,
+                QueuedAt = now,
+                Status = AlertDeliveryStatus.Pending,
+            }).ToList();
 
-                string? error;
-                if (!settings.Enabled || settings.Recipients.Count == 0)
-                {
-                    error = "Canal desativado ou sem destinatários configurados.";
-                }
-                else
-                {
-                    try
-                    {
-                        if (await channel.TrySendAsync(message, settings, system, ct))
-                        {
-                            error = null;
-                            logger.LogInformation(
-                                "Capture alert sent via {Channel} for capture {CaptureId} ({Class} @ {Camera}).",
-                                channel.Channel, capture.Id, capture.ObjectClass, capture.CameraName);
-                        }
-                        else
-                        {
-                            error = "O canal não confirmou o envio (verifique as configurações e os destinatários).";
-                        }
-                    }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        error = ex.Message;
-                        logger.LogError(ex, "Capture alert via {Channel} failed for capture {CaptureId}.",
-                            channel.Channel, capture.Id);
-                    }
-                }
-
-                logs.Add(new CaptureAlertLog
-                {
-                    CaptureId = capture.Id,
-                    CaptureRuleId = rule.Id,
-                    SentAt = DateTime.Now,
-                    Channel = channel.Channel,
-                    Status = error == null ? CaptureAlertStatus.Success : CaptureAlertStatus.Fail,
-                    ErrorMessage = error,
-                });
-            }
-
-            capture.AlertSentAt = DateTime.Now;
-            await captureRepository.UpdateAsync(capture, ct);
-            await TryWriteLogsAsync(logs, ct);
+            await deliveryRepository.AddRangeAsync(deliveries, ct);
+            logger.LogInformation(
+                "Queued {Count} notification(s) for capture {CaptureId} ({Class} @ {Camera}).",
+                deliveries.Count, capture.Id, capture.ObjectClass, capture.CameraName);
         }
-    }
-
-    /// <summary>Alert logging is best-effort: a log failure must never break dispatch.</summary>
-    private async Task TryWriteLogsAsync(IReadOnlyList<CaptureAlertLog> logs, CancellationToken ct)
-    {
-        if (logs.Count == 0)
-            return;
-        try
-        {
-            await alertLogRepository.AddRangeAsync(logs, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Failed to persist {Count} capture alert log row(s).", logs.Count);
-        }
-    }
-
-    private AlertMessage ComposeCaptureMessage(Capture capture, string baseUrl)
-    {
-        var labelRaw = DetectableClasses.Translate(capture.ObjectClass);
-        // Tokenized link: the recipient plays this one capture without signing in.
-        var playbackUrl = captureLinks.PlaybackUrl(capture.Id, baseUrl);
-        var thumbnail = ResolveThumbnail(capture);
-
-        var camera = WebUtility.HtmlEncode(capture.CameraName);
-        var label = WebUtility.HtmlEncode(labelRaw);
-        var started = capture.StartedAt.ToString("dd/MM/yyyy HH:mm:ss");
-        var duration = capture.Duration.ToString(@"mm\:ss");
-
-        var text =
-            $"Alerta de captura — CameraVision\n\n" +
-            $"Câmera: {capture.CameraName}\n" +
-            $"Objeto: {labelRaw}\n" +
-            $"Início: {started}\n" +
-            $"Duração: {duration}\n\n" +
-            $"Assista ao vídeo: {playbackUrl}\n";
-
-        var thumbnailHtml = thumbnail == null
-            ? ""
-            : "<p style=\"margin:0 0 16px\"><img src=\"cid:inline-image@cameravision\" " +
-              "alt=\"Miniatura da captura\" style=\"max-width:100%;border-radius:6px\" /></p>";
-        var html =
-            "<div style=\"font-family:Roboto,Arial,sans-serif;max-width:520px\">" +
-            "<h2 style=\"color:#594ae2;margin:0 0 12px\">Alerta de captura</h2>" +
-            $"<p style=\"margin:0 0 16px\">Um objeto <b>{label}</b> foi detectado na câmera <b>{camera}</b>.</p>" +
-            thumbnailHtml +
-            "<table style=\"border-collapse:collapse;margin:0 0 16px\">" +
-            $"<tr><td style=\"padding:2px 12px 2px 0;color:#666\">Câmera</td><td><b>{camera}</b></td></tr>" +
-            $"<tr><td style=\"padding:2px 12px 2px 0;color:#666\">Objeto</td><td><b>{label}</b></td></tr>" +
-            $"<tr><td style=\"padding:2px 12px 2px 0;color:#666\">Início</td><td>{started}</td></tr>" +
-            $"<tr><td style=\"padding:2px 12px 2px 0;color:#666\">Duração</td><td>{duration}</td></tr>" +
-            "</table>" +
-            $"<p><a href=\"{playbackUrl}\" style=\"display:inline-block;background:#594ae2;color:#ffffff;" +
-            "padding:10px 20px;border-radius:4px;text-decoration:none\">Assistir vídeo</a></p>" +
-            "<p style=\"color:#888;font-size:12px\">CameraVision — alerta automático, não responda.</p>" +
-            "</div>";
-
-        return new AlertMessage(
-            $"Alerta de captura — {labelRaw} em {capture.CameraName}",
-            html, text, thumbnail);
-    }
-
-    private string? ResolveThumbnail(Capture capture)
-    {
-        if (capture.ThumbnailPath == null)
-            return null;
-        var path = Path.Combine(storage.OutputRoot,
-            capture.ThumbnailPath.Replace('/', Path.DirectorySeparatorChar));
-        return File.Exists(path) ? path : null;
     }
 }

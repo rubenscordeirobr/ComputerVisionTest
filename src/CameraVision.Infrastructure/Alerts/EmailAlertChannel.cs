@@ -18,7 +18,7 @@ public sealed class EmailAlertChannel(ILogger<EmailAlertChannel> logger) : IAler
 
     public AlertChannel Channel => AlertChannel.Email;
 
-    public async Task<bool> TrySendAsync(AlertMessage message, AlertSettings settings,
+    public async Task<bool> TrySendAsync(AlertMessage message, IReadOnlyList<string> recipients,
         SystemSettings system, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(system.SmtpHost) ||
@@ -32,7 +32,7 @@ public sealed class EmailAlertChannel(ILogger<EmailAlertChannel> logger) : IAler
         mime.From.Add(new MailboxAddress(
             string.IsNullOrWhiteSpace(system.SmtpSenderName) ? "CameraVision" : system.SmtpSenderName,
             system.SmtpSenderEmail));
-        foreach (var recipient in settings.Recipients)
+        foreach (var recipient in recipients)
         {
             if (MailboxAddress.TryParse(recipient, out var address))
                 mime.To.Add(address);

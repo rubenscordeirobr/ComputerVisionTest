@@ -37,11 +37,8 @@ builder.Services.AddSingleton(new CaptureLinkOptions
 });
 builder.Services.AddSingleton<CaptureLinkService>();
 
-// Ingested captures trigger the same rule-based alert dispatch as the web app.
-builder.Services.AddHttpClient();
-builder.Services.AddSingleton<IEvolutionApiClient, EvolutionApiClient>();
-builder.Services.AddSingleton<IAlertChannel, EmailAlertChannel>();
-builder.Services.AddSingleton<IAlertChannel, WhatsAppAlertChannel>();
+// Ingested captures are matched against the capture rules and queued for delivery
+// by the web app (AlertDeliveryHostedService); the API never sends anything.
 builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
 
 // Share the auth cookie with the web app: same cookie name, application name and

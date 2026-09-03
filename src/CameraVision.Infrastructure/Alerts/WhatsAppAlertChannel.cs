@@ -17,7 +17,7 @@ public sealed class WhatsAppAlertChannel(
 {
     public AlertChannel Channel => AlertChannel.WhatsApp;
 
-    public async Task<bool> TrySendAsync(AlertMessage message, AlertSettings settings,
+    public async Task<bool> TrySendAsync(AlertMessage message, IReadOnlyList<string> recipients,
         SystemSettings system, CancellationToken ct = default)
     {
         var text = message.TextBody.Trim();
@@ -31,7 +31,7 @@ public sealed class WhatsAppAlertChannel(
         }
 
         var sent = 0;
-        foreach (var recipient in settings.Recipients)
+        foreach (var recipient in recipients)
         {
             var result = image != null
                 ? await evolution.SendImageAsync(system, recipient, text, image, fileName, ct)
@@ -46,7 +46,7 @@ public sealed class WhatsAppAlertChannel(
 
         if (sent > 0)
             logger.LogInformation("WhatsApp alert \"{Subject}\" sent to {Sent}/{Total} recipient(s).",
-                message.Subject, sent, settings.Recipients.Count);
+                message.Subject, sent, recipients.Count);
         return sent > 0;
     }
 }
