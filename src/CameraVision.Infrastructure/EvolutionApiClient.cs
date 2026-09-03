@@ -135,8 +135,13 @@ public sealed class EvolutionApiClient(
                 {
                     enabled = true,
                     url = webhookUri.ToString(),
+                    // Media (voice notes) arrives decoded in the payload — getBase64FromMediaMessage
+                    // is unreliable for iOS audio on 2.3.x. 2.3.x reads byEvents/base64, older
+                    // builds webhookByEvents/webhookBase64 — send both spellings.
+                    byEvents = false,
+                    base64 = true,
                     webhookByEvents = false,
-                    webhookBase64 = false,
+                    webhookBase64 = true,
                     headers = new Dictionary<string, string> { ["X-Webhook-Key"] = secret.Trim() },
                     events = new[] { "MESSAGES_UPSERT" },
                 },
@@ -176,12 +181,48 @@ public sealed class EvolutionApiClient(
             if (json.ValueKind != JsonValueKind.Object)
                 return new EvolutionWebhookState(false, null);
             var enabled = json.TryGetProperty("enabled", out var flag) && flag.ValueKind == JsonValueKind.True;
-            return new EvolutionWebhookState(enabled, GetString(json, "url"));
+            var base64 = json.TryGetProperty("webhookBase64", out var inline) && inline.ValueKind == JsonValueKind.True;
+            return new EvolutionWebhookState(enabled, GetString(json, "url"), Base64: base64);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Evolution API webhook lookup failed.");
             return new EvolutionWebhookState(false, null, $"Falha ao contatar a Evolution API: {ex.Message}");
+        }
+    }
+
+    public async Task<EvolutionMediaResult> GetMediaBase64Async(SystemSettings settings, string remoteJid, string messageId,
+        CancellationToken ct = default)
+    {
+        if (Validate(settings) is { } configError)
+            return new EvolutionMediaResult(false, Error: configError);
+
+        try
+        {
+            using var client = CreateClient(settings, TimeSpan.FromSeconds(30));
+            var instance = Uri.EscapeDataString(settings.EvolutionInstanceName.Trim());
+            var response = await client.PostAsJsonAsync($"chat/getBase64FromMediaMessage/{instance}", new
+            {
+                message = new { key = new { remoteJid, fromMe = false, id = messageId } },
+                convertToMp4 = false,
+            }, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                var detail = await ReadErrorDetailAsync(response, ct);
+                return new EvolutionMediaResult(false, Error:
+                    $"A Evolution API retornou HTTP {(int)response.StatusCode}" + (detail == null ? "." : $": {detail}"));
+            }
+
+            var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            var base64 = GetString(json, "base64");
+            if (string.IsNullOrWhiteSpace(base64))
+                return new EvolutionMediaResult(false, Error: "A Evolution API não retornou o conteúdo da mídia.");
+            return new EvolutionMediaResult(true, Convert.FromBase64String(base64), GetString(json, "mimetype"));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Evolution API media download failed.");
+            return new EvolutionMediaResult(false, Error: $"Falha ao contatar a Evolution API: {ex.Message}");
         }
     }
 

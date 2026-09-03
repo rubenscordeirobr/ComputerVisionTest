@@ -179,6 +179,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(l => l.SenderNumber).HasMaxLength(20);
             e.Property(l => l.PushName).HasMaxLength(100);
             e.Property(l => l.Text).HasMaxLength(1000);
+            e.Property(l => l.Kind).HasConversion<string>().HasMaxLength(10);
+            e.Property(l => l.AudioPath).HasMaxLength(300);
+            e.Property(l => l.AudioMimeType).HasMaxLength(100);
             e.Property(l => l.Status).HasConversion<string>().HasMaxLength(20);
             e.Property(l => l.Detail).HasMaxLength(500);
             e.Property(l => l.Intent).HasMaxLength(30);
