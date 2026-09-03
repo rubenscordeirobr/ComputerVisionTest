@@ -110,25 +110,4 @@ public class CaptureRepository(IDbContextFactory<AppDbContext> factory) : ICaptu
             query = query.Where(c => c.TenantId == tid);
         return await query.CountAsync(ct);
     }
-
-    public async Task<IReadOnlyList<Capture>> GetPendingAlertsAsync(int take, CancellationToken ct = default)
-    {
-        await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.Captures.AsNoTracking()
-            .Where(c => c.AlertQueuedAt != null && c.AlertSentAt == null)
-            .OrderBy(c => c.AlertQueuedAt)
-            .Take(take)
-            .ToListAsync(ct);
-    }
-
-    public async Task MarkAlertsSentAsync(IEnumerable<int> ids, DateTime sentAt, CancellationToken ct = default)
-    {
-        var idList = ids.ToList();
-        if (idList.Count == 0)
-            return;
-        await using var db = await factory.CreateDbContextAsync(ct);
-        await db.Captures
-            .Where(c => idList.Contains(c.Id))
-            .ExecuteUpdateAsync(s => s.SetProperty(c => c.AlertSentAt, sentAt), ct);
-    }
 }

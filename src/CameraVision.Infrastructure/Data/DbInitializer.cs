@@ -75,10 +75,6 @@ public static class DbInitializer
         if (!await db.AdminAlertSettings.AnyAsync(ct))
             db.Add(new AdminAlertSettings { Id = 1 });
 
-        // Per-tenant antiflood: other tenants fall back to defaults until saved.
-        if (!await db.CaptureAlertSettings.AnyAsync(s => s.TenantId == tenant.Id, ct))
-            db.Add(new CaptureAlertSettings { TenantId = tenant.Id });
-
         foreach (var channel in new[] { AlertChannel.Email, AlertChannel.WhatsApp })
         {
             if (!await db.AlertSettings.AnyAsync(s => s.TenantId == tenant.Id && s.Channel == channel, ct))

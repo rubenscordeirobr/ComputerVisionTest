@@ -70,31 +70,6 @@ public class SettingsRepository(IDbContextFactory<AppDbContext> factory) : ISett
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<CaptureAlertSettings> GetCaptureAlertSettingsAsync(int tenantId, CancellationToken ct = default)
-    {
-        await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.CaptureAlertSettings.AsNoTracking()
-                   .FirstOrDefaultAsync(s => s.TenantId == tenantId, ct)
-               ?? new CaptureAlertSettings { TenantId = tenantId };
-    }
-
-    public async Task SaveCaptureAlertSettingsAsync(CaptureAlertSettings settings, CancellationToken ct = default)
-    {
-        await using var db = await factory.CreateDbContextAsync(ct);
-        var existing = await db.CaptureAlertSettings.FirstOrDefaultAsync(
-            s => s.TenantId == settings.TenantId, ct);
-        if (existing == null)
-        {
-            db.Add(settings);
-        }
-        else
-        {
-            settings.Id = existing.Id;
-            db.Entry(existing).CurrentValues.SetValues(settings);
-        }
-        await db.SaveChangesAsync(ct);
-    }
-
     public async Task<SystemSettings> GetSystemSettingsAsync(CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);

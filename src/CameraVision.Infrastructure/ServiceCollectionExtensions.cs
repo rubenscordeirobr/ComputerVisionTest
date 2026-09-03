@@ -20,7 +20,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICameraRepository, CameraRepository>();
         services.AddSingleton<ICaptureRepository, CaptureRepository>();
         services.AddSingleton<ICaptureRuleRepository, CaptureRuleRepository>();
-        services.AddSingleton<ICaptureAlertLogRepository, CaptureAlertLogRepository>();
+        services.AddSingleton<IContactRepository, ContactRepository>();
+        services.AddSingleton<IAlertDeliveryRepository, AlertDeliveryRepository>();
         services.AddSingleton<ISettingsRepository, SettingsRepository>();
         services.AddSingleton<ICameraHealthEventRepository, CameraHealthEventRepository>();
         services.AddSingleton<ISystemAlertEventRepository, SystemAlertEventRepository>();
