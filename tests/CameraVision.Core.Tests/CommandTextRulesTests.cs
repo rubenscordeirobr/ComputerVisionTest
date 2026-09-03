@@ -75,6 +75,78 @@ public class CommandTextRulesTests
         Assert.Equal(Now.AddHours(2), result.Until);
     }
 
+    [Theory]
+    [InlineData("status")]
+    [InlineData("Status das câmeras")]
+    [InlineData("você poderia me informar a saúde das câmeras?")]
+    [InlineData("voce poderia me informar a sudade da camaras")]
+    [InlineData("como estão as câmeras?")]
+    [InlineData("o processador está funcionando?")]
+    [InlineData("as câmeras estão ligadas?")]
+    [InlineData("a câmera da garagem caiu?")]
+    public void Status_phrases(string text)
+    {
+        var result = CommandTextRules.TryMatch(text, Now);
+        Assert.NotNull(result);
+        Assert.Equal(CommandIntent.CameraStatus, result.Intent);
+    }
+
+    [Fact]
+    public void Captures_with_count_and_class()
+    {
+        var result = CommandTextRules.TryMatch("vc pode me enviar a lista das últimas 3 capturas de pessoas", Now);
+        Assert.NotNull(result);
+        Assert.Equal(CommandIntent.ListCaptures, result.Intent);
+        Assert.Equal(3, result.Count);
+        Assert.Equal("person", result.ObjectClass);
+        Assert.Null(result.UnknownClass);
+    }
+
+    [Theory]
+    [InlineData("últimas capturas")]
+    [InlineData("quero ver as capturas de hoje")]
+    [InlineData("me manda os últimos vídeos")]
+    public void Captures_without_count_or_class(string text)
+    {
+        var result = CommandTextRules.TryMatch(text, Now);
+        Assert.NotNull(result);
+        Assert.Equal(CommandIntent.ListCaptures, result.Intent);
+        Assert.Null(result.Count);
+        Assert.Null(result.ObjectClass);
+        Assert.Null(result.UnknownClass);
+    }
+
+    [Fact]
+    public void Captures_keep_the_raw_count_and_resolve_plurals()
+    {
+        var result = CommandTextRules.TryMatch("últimas 50 capturas de gatos", Now);
+        Assert.NotNull(result);
+        Assert.Equal(50, result.Count);
+        Assert.Equal("cat", result.ObjectClass);
+
+        var words = CommandTextRules.TryMatch("mostra as duas últimas capturas de cães de hoje", Now);
+        Assert.NotNull(words);
+        Assert.Equal(2, words.Count);
+        Assert.Equal("dog", words.ObjectClass);
+    }
+
+    [Fact]
+    public void Captures_of_an_unknown_object_report_the_word()
+    {
+        var result = CommandTextRules.TryMatch("últimas capturas de dinossauros", Now);
+        Assert.NotNull(result);
+        Assert.Equal(CommandIntent.ListCaptures, result.Intent);
+        Assert.Null(result.ObjectClass);
+        Assert.Equal("dinossauros", result.UnknownClass);
+    }
+
+    [Fact]
+    public void Read_only_intents_are_flagged()
+    {
+        Assert.True(CommandTextRules.TryMatch("status", Now)!.IsReadOnly);
+        Assert.False(CommandTextRules.TryMatch("ativar alertas", Now)!.IsReadOnly);
+    }
+
     [Fact]
     public void Fold_strips_accents_and_punctuation() =>
         Assert.Equal("ate as 22:30 nao", CommandTextRules.Fold("  Até às 22:30, NÃO!  "));
