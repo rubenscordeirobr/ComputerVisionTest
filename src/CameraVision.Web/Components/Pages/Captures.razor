@@ -71,7 +71,7 @@
             <MudTd>
                 @if (context.ThumbnailPath != null)
                 {
-                    <img src="@MediaUrl(context.ThumbnailPath)" alt="miniatura"
+                    <img src="@ThumbnailUrl(context)" alt="miniatura"
                          style="height: 48px; border-radius: 4px; display: block;" />
                 }
                 else
@@ -101,7 +101,7 @@
                                    OnClick="@(() => ShowDeliveriesAsync(context))" aria-label="Notificações" />
                 </MudTooltip>
                 <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small"
-                               Href="@MediaUrl(context.FilePath)" download="@FileNameOf(context)"
+                               Href="@VideoUrl(context)" download="@FileNameOf(context)"
                                aria-label="Baixar" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                OnClick="@(() => DeleteAsync(context))" aria-label="Excluir" />
@@ -204,7 +204,7 @@
                       $"{capture.StartedAt:dd/MM/yyyy HH:mm:ss} ({FormatDuration(capture.Duration)})";
         var parameters = new DialogParameters<VideoPlayerDialog>
         {
-            { d => d.VideoUrl, MediaUrl(capture.FilePath) },
+            { d => d.VideoUrl, VideoUrl(capture) },
             { d => d.Details, details },
         };
         await DialogService.ShowAsync<VideoPlayerDialog>("Reprodução", parameters,
@@ -254,7 +254,10 @@
         await _table.ReloadServerData();
     }
 
-    private string MediaUrl(string relPath) => Media.For(relPath);
+    // Media URLs are signed with the capture's playback token — see MediaUrls.
+    private string VideoUrl(Capture capture) => Media.For(capture.Id, capture.FilePath);
+
+    private string ThumbnailUrl(Capture capture) => Media.For(capture.Id, capture.ThumbnailPath!);
 
     private static string FileNameOf(Capture capture) => Path.GetFileName(capture.FilePath);
 

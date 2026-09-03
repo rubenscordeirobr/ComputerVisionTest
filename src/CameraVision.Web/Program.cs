@@ -42,7 +42,6 @@ builder.Services.AddCameraVisionData(storage.DatabasePath);
 
 // Media (videos/thumbnails) is streamed by the API application (SPEC-11).
 var mediaBaseUrl = (builder.Configuration["Api:MediaBaseUrl"] ?? "http://localhost:5220").TrimEnd('/');
-builder.Services.AddSingleton(new MediaUrls(mediaBaseUrl));
 
 // Public (tokenized) capture links used in alert e-mails — the host names live in
 // appsettings.json (CaptureLinks), the secret must match the API's.
@@ -53,6 +52,11 @@ builder.Services.AddSingleton(new CaptureLinkOptions
     Secret = builder.Configuration["CaptureLinks:Secret"] ?? "",
 });
 builder.Services.AddSingleton<CaptureLinkService>();
+
+// The signed-in pages sign their media URLs with the same tokens, so they work
+// even when the browser reaches the web app on a different host than the API.
+builder.Services.AddSingleton(sp =>
+    new MediaUrls(mediaBaseUrl, sp.GetRequiredService<CaptureLinkService>()));
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

@@ -20,7 +20,7 @@ else
     <MudText Typo="Typo.h4" Class="mb-4">Reprodução de captura</MudText>
 
     <MudPaper Class="pa-4" Style="max-width: 960px;">
-        <video controls autoplay src="@Media.For(_capture.FilePath)"
+        <video controls autoplay src="@Media.For(_capture.Id, _capture.FilePath)"
                style="width: 100%; max-height: 70vh; background: #000;">
             Seu navegador não suporta a reprodução deste vídeo.
         </video>
@@ -45,7 +45,7 @@ else
         </MudGrid>
 
         <div class="d-flex gap-2 mt-4">
-            <MudButton Variant="Variant.Outlined" Href="@Media.For(_capture.FilePath)" Target="_blank"
+            <MudButton Variant="Variant.Outlined" Href="@Media.For(_capture.Id, _capture.FilePath)" Target="_blank"
                        StartIcon="@Icons.Material.Filled.Download">Baixar</MudButton>
             <MudButton Href="/captures" StartIcon="@Icons.Material.Filled.ArrowBack">Voltar para capturas</MudButton>
         </div>
