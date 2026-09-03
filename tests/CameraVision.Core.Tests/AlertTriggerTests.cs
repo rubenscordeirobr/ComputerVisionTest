@@ -160,4 +160,23 @@ public class AlertTriggerTests
     [Fact]
     public void Weekdays_and_weekend_partition_the_week() =>
         Assert.Equal(DaysOfWeek.All, DaysOfWeek.Weekdays | DaysOfWeek.Weekend);
+
+    [Fact]
+    public void Running_temporary_requires_kind_enabled_and_validity()
+    {
+        var now = On(DayOfWeek.Wednesday, 15);
+        var running = new AlertTrigger
+        {
+            Kind = AlertTriggerKind.Temporary, ActiveFrom = now.AddHours(-1), ExpiresAt = now.AddHours(1),
+        };
+        Assert.True(running.IsRunningTemporaryAt(now));
+
+        Assert.False(new AlertTrigger { Kind = AlertTriggerKind.Temporary, ActiveFrom = now.AddHours(-2), ExpiresAt = now.AddHours(-1) }
+            .IsRunningTemporaryAt(now));
+        Assert.False(new AlertTrigger { Kind = AlertTriggerKind.Temporary, ActiveFrom = now.AddHours(-1), Enabled = false }
+            .IsRunningTemporaryAt(now));
+        Assert.False(new AlertTrigger { Kind = AlertTriggerKind.Always }.IsRunningTemporaryAt(now));
+        Assert.True(new AlertTrigger { Kind = AlertTriggerKind.Temporary, ActiveFrom = now.AddHours(-1) }
+            .IsRunningTemporaryAt(now));
+    }
 }
