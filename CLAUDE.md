@@ -27,10 +27,12 @@ Solution `ComputerVisionTest.slnx` (central package management via
 - `src/CameraVision.Core` — domain entities, enums, repository/service interfaces
   (no dependencies).
 - `src/CameraVision.Infrastructure` — EF Core + SQLite (`data/database.db`, WAL,
-  migrations auto-applied), repositories, capture importer, rule-based alert
-  dispatcher + channels (MailKit email, WhatsApp via Evolution API), Evolution
-  API client (QR pairing + sendText/sendMedia; the dockerized Evolution API is
-  the unofficial Baileys-based WhatsApp gateway).
+  migrations auto-applied), repositories, capture importer, the alert
+  dispatcher (matches capture rules and queues one `AlertDelivery` per
+  recipient via the pure `AlertTargetResolver` in Core — it never sends),
+  the PT-BR message composer, alert channels (MailKit email, WhatsApp via
+  Evolution API), Evolution API client (QR pairing + sendText/sendMedia; the
+  dockerized Evolution API is the unofficial Baileys-based WhatsApp gateway).
 - `src/CameraVision.Api` — minimal API (port 5220): worker endpoints
   (`X-Api-Key`) for cameras/capture-rules/status/heartbeat/capture-ingest, and
   the media streaming service (`/media`, authorized by the web app's cookie via
@@ -38,8 +40,12 @@ Solution `ComputerVisionTest.slnx` (central package management via
 - `src/CameraVision.Web` — Blazor Server (InteractiveServer) + MudBlazor 9
   management app, PT-BR UI: cookie auth (login page is static SSR), camera CRUD
   + health monitor + health alerting (debounce, cooldown/flood cap/digest, event
-  history), capture rules, capture browser (media streamed from the API),
-  settings pages, user management. **Multi-tenant** (SPEC-14): data is scoped by
+  history), contacts (`/contacts`), capture rules with per-rule notification
+  triggers (contacts + schedules + temporary notices, deduped per recipient)
+  and antiflood windows (SPEC-16), the `AlertDeliveryHostedService` (the only
+  sender of capture notifications, 10 s tick), capture browser (media
+  streamed from the API), settings pages, user management. **Multi-tenant**
+  (SPEC-14): data is scoped by
   `TenantId` ("Cliente" in the UI); roles User/Admin/SuperAdmin — seeded
   `admin`/`admin2026` is the tenant-less SuperAdmin (manages tenants + system
   settings), `rubens.cordeiro@live.com.br`/`test` is the first tenant's admin.

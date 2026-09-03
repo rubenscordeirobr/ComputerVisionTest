@@ -87,23 +87,35 @@ dotnet run --project src/CameraVision.Web
   is detecting/recording), and a red banner on the dashboard and cameras page
   flags a stopped worker.
 - **Regras de Captura**: multiple rules per tenant — each says which classes
-  are recorded, with which thresholds, and which alert channels fire (e.g.
-  "gato → e-mail", "pessoa → WhatsApp"). The worker applies the union of all
-  tenants' enabled rules; a capture only *alerts* through its own tenant's
-  rules and recipients.
+  are recorded, with which thresholds, who is notified and when
+  (**Notificações**: channel + contacts + "sempre" / weekly days and hours /
+  temporary notice) and its own **antiflood** window (e.g. "pessoas a cada
+  3 min", "gatos e cães a cada 30 min", or *Imediato*). A contact reached by
+  several notifications of one capture gets a single message. The page's
+  **Aviso temporário** button turns on a "notify me until I turn it off (or
+  until a date/time)" trigger on any set of rules. The worker applies the
+  union of all tenants' enabled rules; a capture only *notifies* through its
+  own tenant's rules and contacts.
+- **Contatos**: named recipients per tenant (e-mail and/or WhatsApp number).
+  Rules pick contacts, and the contacts flagged *Recebe alertas de saúde das
+  câmeras* get the camera health alerts.
 - **Capturas**: registered instantly by the worker via the API (with an
   annotated thumbnail); a background indexer reconciles pre-existing footage
   every 60 s / via *Reindexar*. Play, download and delete in the browser
   (files streamed by the API — `Api:MediaBaseUrl` in the web appsettings).
-- **Alertas**: per-tenant channel recipients; capture alerts (thumbnail +
-  playback link; SMTP in *Sistema*, link host in *URL pública*) and **camera
-  health alerts** — offline/weak (latency threshold) with debounce, recovery
+- **Alertas**: per-tenant channel master switches. Capture notifications
+  (thumbnail + playback link; SMTP in *Sistema*, link host in *URL pública*)
+  are queued by the API/indexer and sent by the web app every 10 s, one
+  message per recipient — individual messages or one summary per recipient
+  per rule window; each capture's *Notificações* dialog shows the
+  per-recipient status (na fila / enviado / falhou). **Camera health
+  alerts** — offline/weak (latency threshold) with debounce, recovery
   notices, per-camera cooldown, global flood cap and an optional digest that
   groups pending events per tenant (precedence: cooldown → flood cap →
   digest; suppressed events stay in the history and ride the next digest).
-  Health tuning and the capture anti-flood are system settings (SuperAdmin).
-  Both channels are implemented: e-mail via SMTP and WhatsApp via the
-  Evolution API (thumbnail sent as image with the alert text as caption).
+  Health tuning is a system setting (SuperAdmin). Both channels are
+  implemented: e-mail via SMTP and WhatsApp via the Evolution API (thumbnail
+  sent as image with the alert text as caption).
 - **Usuários**: admin-only user management (create, edit, deactivate, reset
   password). Tenant admins manage their own tenant; the SuperAdmin manages
   everyone and assigns tenants/roles.
@@ -126,9 +138,10 @@ The API (`src/CameraVision.Api`, port 5220) serves the worker endpoints
 streams recordings to signed-in browsers.
 
 v1 limitations: SMTP/API secrets are stored unencrypted in SQLite (LAN use);
-failed alert sends are logged, not retried; deactivating a user does not
-terminate their already-open session; the worker reads cameras/rules only at
-startup (restart to apply changes).
+failed notification sends are recorded on the capture, never retried; capture
+notifications only go out while the web app runs (the API just queues them);
+deactivating a user does not terminate their already-open session; the worker
+reads cameras/rules only at startup (restart to apply changes).
 
 ## Camera definitions — `data/cameras.json`
 
