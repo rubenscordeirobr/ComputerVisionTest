@@ -1,4 +1,4 @@
-namespace CameraVision.Web.Services;
+namespace CameraVision.Core;
 
 /// <summary>PT-BR relative/duration text for status displays.</summary>
 public static class TimeText

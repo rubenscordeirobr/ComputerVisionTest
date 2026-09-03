@@ -1,4 +1,5 @@
 using System.Net;
+using CameraVision.Core;
 using CameraVision.Core.Alerts;
 using CameraVision.Core.Entities;
 using CameraVision.Core.Health;
