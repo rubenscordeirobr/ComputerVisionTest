@@ -6,9 +6,8 @@ namespace CameraVision.Web.Services;
 
 /// <summary>
 /// Sends critical system alerts to the system administrators through the
-/// channels enabled in AdminAlertSettings. The admin recipients ride the same
-/// channel implementations used by tenant alerts, via transient AlertSettings
-/// that are never persisted.
+/// channels enabled in AdminAlertSettings. The admin recipients (SuperAdmin scope,
+/// tenant-less) ride the same channel implementations used by tenant alerts.
 /// </summary>
 public sealed class AdminAlertNotifier(
     IEnumerable<IAlertChannel> channels,
@@ -33,16 +32,9 @@ public sealed class AdminAlertNotifier(
             if (recipients == null || recipients.Count == 0)
                 continue;
 
-            var settings = new AlertSettings
-            {
-                Channel = channel.Channel,
-                Enabled = true,
-                Recipients = recipients,
-            };
-
             try
             {
-                if (await channel.TrySendAsync(message, settings, system, ct))
+                if (await channel.TrySendAsync(message, recipients, system, ct))
                     anySent = true;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

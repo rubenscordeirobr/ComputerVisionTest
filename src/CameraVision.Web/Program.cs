@@ -78,7 +78,8 @@ builder.Services.AddSingleton<IEvolutionApiClient, EvolutionApiClient>();
 builder.Services.AddSingleton<IAlertChannel, EmailAlertChannel>();
 builder.Services.AddSingleton<IAlertChannel, WhatsAppAlertChannel>();
 builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
-builder.Services.AddHostedService<CaptureAlertDigestHostedService>();
+builder.Services.AddSingleton<CaptureAlertComposer>();
+builder.Services.AddHostedService<AlertDeliveryHostedService>();
 
 // Authentication: cookie scheme + PasswordHasher over the custom AppUser table
 // (full ASP.NET Core Identity is overkill for one LAN admin — see SPEC-08).

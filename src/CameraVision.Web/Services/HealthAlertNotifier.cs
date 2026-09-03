@@ -6,12 +6,14 @@ namespace CameraVision.Web.Services;
 
 /// <summary>
 /// Sends a health AlertMessage through the channels enabled in HealthAlertSettings,
-/// respecting each channel's own master switch and the recipients of the camera's
-/// tenant. Shared by the individual health alerts and the digest job.
+/// respecting each channel's master switch, to the contacts of the camera's tenant
+/// flagged for camera-health alerts. Shared by the individual health alerts and the
+/// digest job.
 /// </summary>
 public sealed class HealthAlertNotifier(
     IEnumerable<IAlertChannel> channels,
     ISettingsRepository settingsRepository,
+    IContactRepository contactRepository,
     ILogger<HealthAlertNotifier> logger)
 {
     public async Task<bool> SendAsync(AlertMessage message, HealthAlertSettings health,
@@ -32,12 +34,16 @@ public sealed class HealthAlertNotifier(
                 continue;
 
             var settings = await settingsRepository.GetAlertSettingsAsync(tenantId, channel.Channel, ct);
-            if (!settings.Enabled || settings.Recipients.Count == 0)
+            if (!settings.Enabled)
+                continue;
+
+            var recipients = await contactRepository.GetHealthRecipientsAsync(tenantId, channel.Channel, ct);
+            if (recipients.Count == 0)
                 continue;
 
             try
             {
-                if (await channel.TrySendAsync(message, settings, system, ct))
+                if (await channel.TrySendAsync(message, recipients, system, ct))
                     anySent = true;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
