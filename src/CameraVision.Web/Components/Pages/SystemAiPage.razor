@@ -1,0 +1,141 @@
+@page "/system/ai"
+@attribute [Authorize(Policy = "SuperAdmin")]
+@using CameraVision.Core.Ai
+@using CameraVision.Core.Commands
+@inject ISettingsRepository SettingsRepo
+@inject IIntentClassifier Classifier
+@inject ISnackbar Snackbar
+
+<PageTitle>Sistema · Inteligência artificial — CameraVision</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Inteligência artificial</MudText>
+
+<MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Modelo usado pelo agente de comandos do WhatsApp para entender mensagens que as regras
+        de palavras-chave não reconhecem. Sem provedor, só as frases simples ("ativar alertas",
+        "desativar alertas") são atendidas.
+    </MudText>
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="4">
+            <MudSelect T="AiProvider" Value="_settings.AiProvider" ValueChanged="OnProviderChanged" Label="Provedor"
+                       AnchorOrigin="Origin.BottomCenter">
+                <MudSelectItem T="AiProvider" Value="AiProvider.None">Nenhum (só regras)</MudSelectItem>
+                <MudSelectItem T="AiProvider" Value="AiProvider.Gemini">Gemini (Google)</MudSelectItem>
+                <MudSelectItem T="AiProvider" Value="AiProvider.Claude">Claude (Anthropic)</MudSelectItem>
+                <MudSelectItem T="AiProvider" Value="AiProvider.DeepSeek">DeepSeek</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="8">
+            <MudSelect T="string" @bind-Value="_settings.AiModel" Label="Modelo" Disabled="@(_settings.AiProvider == AiProvider.None)"
+                       AnchorOrigin="Origin.BottomCenter" ToStringFunc="ModelName">
+                @foreach (var model in AiModelCatalog.For(_settings.AiProvider))
+                {
+                    <MudSelectItem T="string" Value="@model.Id">
+                        <div>@model.Name</div>
+                        <div style="font-size: 0.75rem; color: silver; line-height: 1.2;">@TierLabel(model.Tier)</div>
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField T="string" @bind-Value="_settings.AiApiKey" Label="Chave da API"
+                          Disabled="@(_settings.AiProvider == AiProvider.None)"
+                          InputType="@(_showApiKey ? InputType.Text : InputType.Password)"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                          OnAdornmentClick="@(() => _showApiKey = !_showApiKey)" />
+        </MudItem>
+    </MudGrid>
+    <div class="d-flex justify-end mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Salvar</MudButton>
+    </div>
+</MudPaper>
+
+<MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
+    <MudText Typo="Typo.subtitle1" Class="mb-2">Teste de interpretação</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Digite uma mensagem como o cliente enviaria pelo WhatsApp. Usa as configurações salvas.
+    </MudText>
+    <div class="d-flex gap-2 align-start flex-wrap">
+        <MudTextField T="string" @bind-Value="_testText" Label="Mensagem" Placeholder="Você poderia ativar os alertas?"
+                      Style="min-width: 320px; flex: 1;" Immediate="true" />
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@(_testing || string.IsNullOrWhiteSpace(_testText))"
+                   StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="TestAsync">Interpretar</MudButton>
+    </div>
+    @if (_testResult != null)
+    {
+        <MudAlert Severity="@(_testResult.Intent == CommandIntent.Unknown ? Severity.Warning : Severity.Success)" Class="mt-3">
+            <b>@CommandReplyText.IntentLabel(_testResult.Intent)</b>
+            · origem: @CommandReplyText.SourceLabel(_testResult.Source)
+            @if (_testResult.UntilDisabled)
+            {
+                <span> · até desativar</span>
+            }
+            else if (_testResult.Until is { } until)
+            {
+                <span> · até @until.ToString("dd/MM HH:mm")</span>
+            }
+        </MudAlert>
+    }
+</MudPaper>
+
+<MudText Typo="Typo.caption" Class="mud-text-secondary">
+    A chave é armazenada localmente sem criptografia (v1, uso em rede local). Custo por mensagem:
+    baixo, médio ou alto conforme o modelo — cada comando gera uma chamada curta.
+</MudText>
+
+@code {
+    private SystemSettings _settings = new();
+    private bool _showApiKey;
+    private string _testText = "";
+    private bool _testing;
+    private CommandInterpretation? _testResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = await SettingsRepo.GetSystemSettingsAsync();
+    }
+
+    private void OnProviderChanged(AiProvider provider)
+    {
+        _settings.AiProvider = provider;
+        if (AiModelCatalog.Find(_settings.AiModel)?.Provider != provider)
+            _settings.AiModel = AiModelCatalog.DefaultModel(provider);
+    }
+
+    private static string ModelName(string? id) => AiModelCatalog.Find(id)?.Name ?? id ?? "";
+
+    private static string TierLabel(AiModelTier tier) => tier switch
+    {
+        AiModelTier.Low => "custo baixo · rápido",
+        AiModelTier.Medium => "custo médio",
+        _ => "custo alto · mais capaz",
+    };
+
+    private async Task SaveAsync()
+    {
+        if (_settings.AiProvider != AiProvider.None && AiModelCatalog.Find(_settings.AiModel)?.Provider != _settings.AiProvider)
+        {
+            Snackbar.Add("Selecione um modelo do provedor escolhido.", Severity.Warning);
+            return;
+        }
+        await SettingsRepo.SaveSystemSettingsAsync(_settings);
+        Snackbar.Add("Configurações salvas.", Severity.Success);
+    }
+
+    private async Task TestAsync()
+    {
+        _testing = true;
+        try
+        {
+            var saved = await SettingsRepo.GetSystemSettingsAsync();
+            _testResult = await Classifier.ClassifyAsync(_testText, saved, DateTime.Now, expectingDuration: false);
+        }
+        finally
+        {
+            _testing = false;
+        }
+    }
+}

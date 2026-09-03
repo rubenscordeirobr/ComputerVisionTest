@@ -1,6 +1,8 @@
 @page "/capture-settings"
 @using CameraVision.Web.Components.Dialogs
+@using CameraVision.Core.Alerts
 @inject ICaptureRuleRepository RuleRepo
+@inject TemporaryNoticeService Notices
 @inject IContactRepository ContactRepo
 @inject ITenantRepository TenantRepo
 @inject IDialogService DialogService
@@ -254,12 +256,7 @@
 
     private async Task EndAllTemporaryAsync()
     {
-        var ids = _rules
-            .SelectMany(r => r.Triggers)
-            .Where(t => TriggerText.IsRunningTemporary(t, DateTime.Now))
-            .Select(t => t.Id)
-            .ToList();
-        await RuleRepo.DeleteTriggersAsync(ids);
+        await Notices.EndAllRunningAsync(_rules, DateTime.Now);
         Snackbar.Add("Avisos temporários encerrados.", Severity.Success);
         await LoadAsync();
     }

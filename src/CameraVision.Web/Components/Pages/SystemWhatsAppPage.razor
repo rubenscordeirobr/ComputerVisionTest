@@ -4,6 +4,7 @@
 @implements IDisposable
 @inject ISettingsRepository SettingsRepo
 @inject IEvolutionApiClient Evolution
+@inject IWhatsAppCommandRepository CommandRepo
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -89,6 +90,97 @@
     }
 </MudPaper>
 
+<MudPaper Class="pa-6 mb-4" Style="max-width: 800px;">
+    <div class="d-flex align-center gap-3 mb-2">
+        <MudText Typo="Typo.subtitle1">Agente de comandos</MudText>
+        @{ var (webhookLabel, webhookColor) = WebhookChip(); }
+        <MudChip T="string" Color="@webhookColor" Size="Size.Small" Variant="Variant.Filled">@webhookLabel</MudChip>
+    </div>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Contatos cadastrados podem mandar "ativar alertas" ou "desativar alertas" para o número
+        pareado: o agente cria ou encerra um aviso temporário no próprio número do remetente e
+        responde. A Evolution API entrega as mensagens recebidas no webhook abaixo (registrado na
+        instância); o modelo de IA opcional fica em <MudLink Href="/system/ai">Inteligência artificial</MudLink>.
+    </MudText>
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="6">
+            <MudSwitch T="bool" @bind-Value="_settings.WhatsAppBotEnabled" Color="Color.Success" Label="Agente ativado" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudNumericField T="int" @bind-Value="_settings.WhatsAppBotDefaultHours" Label="Duração padrão (horas)"
+                             Min="1" Max="72" HelperText="Quando o remetente não diz até quando" />
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField T="string" @bind-Value="_settings.WhatsAppWebhookUrl" Label="URL do webhook (vista pela Evolution API)"
+                          Validation="@(new Func<string, string?>(SettingsValidation.OptionalUrl))"
+                          HelperText="Padrão: http://host.docker.internal:5220/api/whatsapp/webhook (API deste host, a partir do Docker)" />
+        </MudItem>
+        <MudItem xs="12" sm="8">
+            <MudTextField T="string" @bind-Value="_settings.WhatsAppWebhookSecret" Label="Segredo do webhook"
+                          InputType="@(_showSecret ? InputType.Text : InputType.Password)"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@(_showSecret ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                          OnAdornmentClick="@(() => _showSecret = !_showSecret)" />
+        </MudItem>
+        <MudItem xs="12" sm="4" Class="d-flex align-center">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Autorenew"
+                       OnClick="GenerateSecret">Gerar segredo</MudButton>
+        </MudItem>
+    </MudGrid>
+    <div class="d-flex justify-end gap-2 mt-4 flex-wrap">
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@(!EvolutionConfigured || _registering)"
+                   StartIcon="@Icons.Material.Filled.Webhook" OnClick="RegisterWebhookAsync">
+            Registrar webhook
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Salvar</MudButton>
+    </div>
+    @if (_webhookError != null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-3">@_webhookError</MudAlert>
+    }
+
+    <MudDivider Class="my-4" />
+
+    <div class="d-flex align-center gap-2 mb-2">
+        <MudText Typo="Typo.subtitle2">Últimas mensagens recebidas</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadCommandsAsync" aria-label="Atualizar" />
+    </div>
+    <MudTable Items="_commands" Dense="true" Hover="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Quando</MudTh>
+            <MudTh>Remetente</MudTh>
+            <MudTh>Mensagem</MudTh>
+            <MudTh>Intenção</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Detalhe</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Quando" Style="white-space: nowrap;">@context.ReceivedAt.ToString("dd/MM HH:mm")</MudTd>
+            <MudTd DataLabel="Remetente" Style="white-space: nowrap;">
+                @(context.PushName ?? context.SenderNumber)
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.SenderNumber</MudText>
+            </MudTd>
+            <MudTd DataLabel="Mensagem">@context.Text</MudTd>
+            <MudTd DataLabel="Intenção" Style="white-space: nowrap;">
+                @CommandReplyText.IntentLabel(context.Intent)
+                @if (context.IntentSource != null)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@CommandReplyText.SourceLabel(context.IntentSource)</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @{ var (statusLabel, statusColor) = StatusChip(context.Status); }
+                <MudChip T="string" Size="Size.Small" Color="@statusColor" Variant="Variant.Text">@statusLabel</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Detalhe">@(context.Detail ?? (context.TriggersAffected > 0 ? $"{context.TriggersAffected} regra(s)" : ""))</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary">Nenhuma mensagem recebida ainda.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
 <MudText Typo="Typo.caption" Class="mud-text-secondary">
     As credenciais são armazenadas localmente sem criptografia (v1, uso em rede local).
 </MudText>
@@ -96,6 +188,11 @@
 @code {
     private SystemSettings _settings = new();
     private bool _showApiKey;
+    private bool _showSecret;
+    private bool _registering;
+    private string? _webhookError;
+    private EvolutionWebhookState? _webhook;
+    private IReadOnlyList<WhatsAppCommandLog> _commands = [];
 
     private EvolutionQr? _qr;
     private string? _pairError;
@@ -107,6 +204,13 @@
     protected override async Task OnInitializedAsync()
     {
         _settings = await SettingsRepo.GetSystemSettingsAsync();
+        // Rows upgraded before these columns existed come back with 0 / "".
+        var defaults = new SystemSettings();
+        if (_settings.WhatsAppBotDefaultHours <= 0)
+            _settings.WhatsAppBotDefaultHours = defaults.WhatsAppBotDefaultHours;
+        if (string.IsNullOrWhiteSpace(_settings.WhatsAppWebhookUrl))
+            _settings.WhatsAppWebhookUrl = defaults.WhatsAppWebhookUrl;
+        await LoadCommandsAsync();
         if (EvolutionConfigured)
             _ = RefreshConnectionOnLoadAsync();
     }
@@ -119,9 +223,66 @@
         if (state.Connection != EvolutionConnection.Error)
         {
             _connection = state.Connection;
+            var webhook = await Evolution.GetWebhookAsync(_settings);
+            if (webhook.Error == null)
+                _webhook = webhook;
             await InvokeAsync(StateHasChanged);
         }
     }
+
+    private async Task LoadCommandsAsync() => _commands = await CommandRepo.GetRecentAsync(20);
+
+    private void GenerateSecret()
+    {
+        _settings.WhatsAppWebhookSecret = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24))
+            .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+        _showSecret = true;
+    }
+
+    private async Task RegisterWebhookAsync()
+    {
+        _registering = true;
+        _webhookError = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_settings.WhatsAppWebhookSecret))
+                GenerateSecret();
+            // The API validates the secret from the same settings row, so save first.
+            await SettingsRepo.SaveSystemSettingsAsync(_settings);
+            var result = await Evolution.SetWebhookAsync(_settings, _settings.WhatsAppWebhookUrl, _settings.WhatsAppWebhookSecret);
+            if (!result.Success)
+            {
+                _webhookError = result.Error;
+                return;
+            }
+            _webhook = await Evolution.GetWebhookAsync(_settings);
+            Snackbar.Add("Webhook registrado na instância.", Severity.Success);
+        }
+        finally
+        {
+            _registering = false;
+        }
+    }
+
+    private (string Label, Color Color) WebhookChip()
+    {
+        if (_webhook == null)
+            return ("Webhook não verificado", Color.Default);
+        if (!_webhook.Enabled || string.IsNullOrWhiteSpace(_webhook.Url))
+            return ("Webhook não registrado", Color.Warning);
+        return string.Equals(_webhook.Url.TrimEnd('/'), _settings.WhatsAppWebhookUrl?.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase)
+            ? ("Webhook registrado", Color.Success)
+            : ("Webhook aponta para outra URL", Color.Warning);
+    }
+
+    private static (string Label, Color Color) StatusChip(WhatsAppCommandStatus status) => status switch
+    {
+        WhatsAppCommandStatus.Pending => ("Na fila", Color.Default),
+        WhatsAppCommandStatus.AwaitingDuration => ("Aguardando prazo", Color.Info),
+        WhatsAppCommandStatus.Done => ("Atendida", Color.Success),
+        WhatsAppCommandStatus.Ignored => ("Ignorada", Color.Default),
+        _ => ("Falhou", Color.Error),
+    };
 
     public void Dispose()
     {

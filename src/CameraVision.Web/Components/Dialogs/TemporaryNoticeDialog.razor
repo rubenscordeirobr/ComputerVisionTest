@@ -1,4 +1,5 @@
-@inject ICaptureRuleRepository RuleRepo
+@using CameraVision.Core.Alerts
+@inject TemporaryNoticeService Notices
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -191,21 +192,9 @@
         _saving = true;
         try
         {
-            var now = DateTime.Now;
-            foreach (var ruleId in _selectedRules)
-            {
-                await RuleRepo.SaveTriggerAsync(new AlertTrigger
-                {
-                    CaptureRuleId = ruleId,
-                    Channel = _channel,
-                    ContactIds = _selectedContacts.ToList(),
-                    Kind = AlertTriggerKind.Temporary,
-                    Days = DaysOfWeek.All,
-                    ActiveFrom = now,
-                    ExpiresAt = expiresAt,
-                });
-            }
-            Snackbar.Add($"Aviso temporário ativado em {_selectedRules.Count} regra(s).", Severity.Success);
+            var count = await Notices.ActivateAsync(_selectedRules, _channel, _selectedContacts.ToList(),
+                DateTime.Now, expiresAt);
+            Snackbar.Add($"Aviso temporário ativado em {count} regra(s).", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
         }
         finally

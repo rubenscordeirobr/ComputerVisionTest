@@ -1,11 +1,14 @@
 using System.Globalization;
 using CameraVision.Core;
+using CameraVision.Core.Ai;
 using CameraVision.Core.Alerts;
 using CameraVision.Core.Auth;
+using CameraVision.Core.Commands;
 using CameraVision.Core.Entities;
 using CameraVision.Core.Health;
 using CameraVision.Core.Repositories;
 using CameraVision.Infrastructure;
+using CameraVision.Infrastructure.Ai;
 using CameraVision.Infrastructure.Alerts;
 using CameraVision.Infrastructure.Data;
 using CameraVision.Web.Components;
@@ -80,6 +83,13 @@ builder.Services.AddSingleton<IAlertChannel, WhatsAppAlertChannel>();
 builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
 builder.Services.AddSingleton<CaptureAlertComposer>();
 builder.Services.AddHostedService<AlertDeliveryHostedService>();
+
+// WhatsApp command agent (SPEC-17): rules first, the configured AI model as fallback.
+builder.Services.AddSingleton<ILlmClient, ClaudeLlmClient>();
+builder.Services.AddSingleton<ILlmClient, GeminiLlmClient>();
+builder.Services.AddSingleton<ILlmClient, DeepSeekLlmClient>();
+builder.Services.AddSingleton<IIntentClassifier, LlmIntentClassifier>();
+builder.Services.AddHostedService<WhatsAppCommandHostedService>();
 
 // Authentication: cookie scheme + PasswordHasher over the custom AppUser table
 // (full ASP.NET Core Identity is overkill for one LAN admin — see SPEC-08).

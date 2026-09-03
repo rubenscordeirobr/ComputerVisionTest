@@ -90,8 +90,7 @@ public static class TriggerText
         groupWindowMinutes <= 0 ? "Imediato" : $"{groupWindowMinutes} min";
 
     /// <summary>A temporary notice that is currently in force (drives the warning chips).</summary>
-    public static bool IsRunningTemporary(AlertTrigger trigger, DateTime now) =>
-        trigger.Kind == AlertTriggerKind.Temporary && trigger.Enabled && trigger.IsActiveAt(now);
+    public static bool IsRunningTemporary(AlertTrigger trigger, DateTime now) => trigger.IsRunningTemporaryAt(now);
 
     private static string Stamp(DateTime at, DateTime now) =>
         at.Year == now.Year ? at.ToString("dd/MM HH:mm") : at.ToString("dd/MM/yyyy HH:mm");
