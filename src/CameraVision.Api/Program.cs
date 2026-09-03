@@ -110,16 +110,7 @@ static async Task<bool> UserOwnsFileAsync(HttpContext context, PathString relati
     if (tenantId == null)
         return false;
 
-    var filePath = relativePath.Value?.TrimStart('/');
-    if (string.IsNullOrEmpty(filePath))
-        return false;
-
-    filePath = Uri.UnescapeDataString(filePath);
-    if (filePath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
-        filePath = Path.ChangeExtension(filePath, ".mp4");
-
-    var captures = context.RequestServices.GetRequiredService<ICaptureRepository>();
-    var capture = await captures.GetByFilePathAsync(filePath, context.RequestAborted);
+    var capture = await FindCaptureAsync(context, relativePath);
     return capture != null && capture.TenantId == tenantId;
 }
 
@@ -129,16 +120,26 @@ static async Task<bool> IsValidCaptureTokenAsync(HttpContext context, PathString
     if (string.IsNullOrEmpty(token))
         return false;
 
-    var filePath = relativePath.Value?.TrimStart('/');
-    if (string.IsNullOrEmpty(filePath))
-        return false;
-
-    var captures = context.RequestServices.GetRequiredService<ICaptureRepository>();
-    var capture = await captures.GetByFilePathAsync(Uri.UnescapeDataString(filePath),
-        context.RequestAborted);
+    var capture = await FindCaptureAsync(context, relativePath);
     if (capture == null)
         return false;
 
     var links = context.RequestServices.GetRequiredService<CaptureLinkService>();
     return links.IsValidToken(capture.Id, token);
+}
+
+// The capture a media request belongs to: a video by its own path, a thumbnail
+// by the video sharing its name (thumbnails have no row of their own).
+static async Task<Capture?> FindCaptureAsync(HttpContext context, PathString relativePath)
+{
+    var filePath = relativePath.Value?.TrimStart('/');
+    if (string.IsNullOrEmpty(filePath))
+        return null;
+
+    filePath = Uri.UnescapeDataString(filePath);
+    if (filePath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
+        filePath = Path.ChangeExtension(filePath, ".mp4");
+
+    var captures = context.RequestServices.GetRequiredService<ICaptureRepository>();
+    return await captures.GetByFilePathAsync(filePath, context.RequestAborted);
 }
