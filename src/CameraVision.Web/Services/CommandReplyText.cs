@@ -35,7 +35,10 @@ public static class CommandReplyText
             : "Não havia alertas temporários ativos para o seu número.";
 
     public static string Unknown() =>
-        "Não entendi. Envie \"ativar alertas\" para receber as capturas no WhatsApp ou \"desativar alertas\" para encerrar.";
+        "Não entendi. Comandos que eu atendo:\n" +
+        "• \"ativar alertas\" / \"desativar alertas\" — receber as capturas no WhatsApp\n" +
+        "• \"status\" — situação das câmeras e do processador\n" +
+        "• \"últimas 5 capturas de pessoas\" — lista com links dos vídeos";
 
     public const string ChannelOffNote =
         "Obs.: o canal WhatsApp está desativado nas configurações de alertas do seu cliente — as mensagens só saem quando ele for ligado.";
@@ -46,6 +49,8 @@ public static class CommandReplyText
         CommandIntent.EnableAlerts => "Ativar alertas",
         CommandIntent.DisableAlerts => "Desativar alertas",
         CommandIntent.SetDuration => "Definir prazo",
+        CommandIntent.CameraStatus => "Status das câmeras",
+        CommandIntent.ListCaptures => "Últimas capturas",
         _ => "Não entendido",
     };
 

@@ -2,8 +2,10 @@ using CameraVision.Core;
 using CameraVision.Core.Alerts;
 using CameraVision.Core.Commands;
 using CameraVision.Core.Entities;
+using CameraVision.Core.Health;
 using CameraVision.Core.Repositories;
 using CameraVision.Core.WhatsApp;
+using CameraVision.Infrastructure.Alerts;
 
 namespace CameraVision.Web.Services;
 
@@ -14,7 +16,9 @@ namespace CameraVision.Web.Services;
 /// temporary notices through <see cref="TemporaryNoticeService"/>. The reply goes out
 /// through the Evolution instance and the row keeps the outcome. An "ativar" without a
 /// validity is activated for the default hours and the agent asks "até quando?"; the
-/// sender's next message within 10 min may then move the end.
+/// sender's next message within 10 min may then move the end. "status" and "últimas N
+/// capturas" (SPEC-18) are read-only reports composed from the health services and the
+/// capture repository.
 /// </summary>
 public sealed class WhatsAppCommandHostedService(
     IWhatsAppCommandRepository commands,
@@ -22,6 +26,12 @@ public sealed class WhatsAppCommandHostedService(
     ISettingsRepository settingsRepository,
     IIntentClassifier classifier,
     TemporaryNoticeService notices,
+    ICameraRepository cameras,
+    ICaptureRepository captures,
+    ICameraHealthService cameraHealth,
+    IWorkerHealthService workerHealth,
+    CaptureLinkService links,
+    CaptureAlertComposer composer,
     IEvolutionApiClient evolution,
     ILogger<WhatsAppCommandHostedService> logger) : BackgroundService
 {
@@ -190,6 +200,54 @@ public sealed class WhatsAppCommandHostedService(
                 reply = CommandReplyText.Disabled(ended);
                 break;
             }
+            case CommandIntent.CameraStatus:
+            {
+                var lines = new List<CameraStatusLine>();
+                foreach (var contact in matches)
+                {
+                    foreach (var camera in await cameras.GetAllAsync(contact.TenantId, ct))
+                    {
+                        var health = cameraHealth.TryGet(camera.Id);
+                        lines.Add(new CameraStatusLine(camera.Name, camera.Enabled,
+                            !string.IsNullOrWhiteSpace(camera.StreamUrl) || !string.IsNullOrWhiteSpace(camera.IpAddress),
+                            health?.Status, health?.PingMs ?? health?.ConnectMs, camera.ProcessorStatusAt));
+                    }
+                }
+                reply = CameraStatusReport.Compose(workerHealth.Current, lines, now);
+                row.Detail = $"{lines.Count} câmera(s)";
+                break;
+            }
+            case CommandIntent.ListCaptures:
+            {
+                if (interpretation.UnknownClass != null)
+                {
+                    reply = CaptureListReport.UnknownClass(interpretation.UnknownClass);
+                    row.Detail = $"Objeto desconhecido: {interpretation.UnknownClass}";
+                    break;
+                }
+
+                var requested = interpretation.Count ?? CommandInterpretation.DefaultCount;
+                var take = Math.Clamp(requested, 1, CommandInterpretation.MaxCount);
+                var items = new List<Capture>();
+                var total = 0;
+                foreach (var contact in matches)
+                {
+                    var page = await captures.QueryAsync(new CaptureFilter
+                    {
+                        TenantId = contact.TenantId,
+                        ObjectClass = interpretation.ObjectClass,
+                        Take = take,
+                    }, ct);
+                    items.AddRange(page.Items);
+                    total += page.TotalCount;
+                }
+                var latest = items.OrderByDescending(c => c.StartedAt).ThenByDescending(c => c.Id).Take(take).ToList();
+                var baseUrl = composer.ResolveBaseUrl(settings, out _);
+                reply = CaptureListReport.Compose(latest, total, requested, interpretation.ObjectClass,
+                    c => links.PlaybackUrl(c.Id, baseUrl));
+                row.Detail = $"{latest.Count} captura(s)";
+                break;
+            }
             default:
                 reply = CommandReplyText.Unknown();
                 // Keep waiting for the validity when the sender said something unrelated.
@@ -199,6 +257,7 @@ public sealed class WhatsAppCommandHostedService(
         }
 
         if (interpretation.Intent != CommandIntent.DisableAlerts && interpretation.Intent != CommandIntent.Unknown &&
+            !interpretation.IsReadOnly &&
             !(await settingsRepository.GetAlertSettingsAsync(matches[0].TenantId, AlertChannel.WhatsApp, ct)).Enabled)
             reply += $"\n\n{CommandReplyText.ChannelOffNote}";
 

@@ -77,6 +77,18 @@
             {
                 <span> · até @until.ToString("dd/MM HH:mm")</span>
             }
+            @if (_testResult.Count is { } count)
+            {
+                <span> · quantidade: @count</span>
+            }
+            @if (_testResult.ObjectClass is { } objectClass)
+            {
+                <span> · objeto: @DetectableClasses.Translate(objectClass)</span>
+            }
+            else if (_testResult.UnknownClass is { } unknownClass)
+            {
+                <span> · objeto não reconhecido: @unknownClass</span>
+            }
         </MudAlert>
     }
 </MudPaper>
