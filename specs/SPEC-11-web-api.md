@@ -96,3 +96,10 @@ served by the API, and the web app points at it via configuration.
   `activeFrom`/`activeTo`) plus the global max segment/linger, because
   time-of-day windows (SPEC-10) make the effective class set time-dependent —
   the worker evaluates windows live.
+- 2026-09-03 — Media URLs built by the signed-in pages now carry the capture's
+  playback token. The shared cookie only reaches the API when the browser is on
+  the same host as `Api:MediaBaseUrl`; reached on any other host (localhost, a
+  second subdomain) the browser leaves it out of the cross-site `img`/`video`
+  requests and every capture thumbnail broke with 401. Token validation on the
+  API also resolves a thumbnail to its capture (`.jpg` → the `.mp4` row), which
+  previously only the cookie's tenant check did.
