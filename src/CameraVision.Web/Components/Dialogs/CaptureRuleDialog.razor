@@ -1,4 +1,6 @@
 @inject ICaptureRuleRepository RuleRepo
+@inject IContactRepository ContactRepo
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -6,8 +8,8 @@
         <MudForm @ref="_form">
             @if (ShowTenantSelect)
             {
-                <MudSelect T="int" @bind-Value="Rule.TenantId" Label="Cliente" Class="mb-3"
-                           AnchorOrigin="Origin.BottomCenter">
+                <MudSelect T="int" Value="Rule.TenantId" ValueChanged="OnTenantChangedAsync" Label="Cliente"
+                           Class="mb-3" AnchorOrigin="Origin.BottomCenter">
                     @foreach (var tenant in Tenants)
                     {
                         <MudSelectItem T="int" Value="@tenant.Id">@tenant.Name</MudSelectItem>
@@ -41,7 +43,7 @@
                            Min="0.05" Max="0.95" Step="0.05" Color="Color.Primary" />
             </div>
 
-            <MudSwitch T="bool" @bind-Value="_hasWindow" Label="Somente em determinado horário"
+            <MudSwitch T="bool" @bind-Value="_hasWindow" Label="Grava somente em determinado horário"
                        Color="Color.Primary" Class="mt-3" />
             @if (_hasWindow)
             {
@@ -54,17 +56,72 @@
                     </MudItem>
                 </MudGrid>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    Fim menor que o início atravessa a meia-noite (ex.: 22:00 até 06:00).
+                    Fim menor que o início atravessa a meia-noite (ex.: 22:00 até 06:00). Fora deste
+                    horário a regra não grava nem avisa.
                 </MudText>
             }
 
-            <MudText Typo="Typo.subtitle2" Class="mt-3">Alertar por</MudText>
-            <MudSwitch T="bool" @bind-Value="Rule.NotifyEmail" Label="E-mail" Color="Color.Primary" />
-            <MudSwitch T="bool" @bind-Value="Rule.NotifyWhatsApp" Label="WhatsApp"
-                       Color="Color.Success" />
+            <MudText Typo="Typo.subtitle2" Class="mt-4">Notificações</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Cada notificação é um canal + contatos + quando avisar. Um contato repetido em várias
+                notificações recebe uma única mensagem. As notificações são salvas junto com a regra.
+            </MudText>
+            <MudTable Items="Rule.Triggers" Dense="true" Elevation="0" Class="mt-1">
+                <HeaderContent>
+                    <MudTh>Canal</MudTh>
+                    <MudTh>Contatos</MudTh>
+                    <MudTh>Quando</MudTh>
+                    <MudTh>Ativa</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Canal" Style="white-space: nowrap;">
+                        <MudIcon Icon="@ChannelUi.Icon(context.Channel)" Color="@ChannelUi.ChannelColor(context.Channel)"
+                                 Size="Size.Small" Class="mr-1" />@ChannelUi.Label(context.Channel)
+                    </MudTd>
+                    <MudTd DataLabel="Contatos">@TriggerText.Contacts(context, _contactsById)</MudTd>
+                    <MudTd DataLabel="Quando">
+                        @TriggerText.Schedule(context, DateTime.Now)
+                        @if (context.Kind == AlertTriggerKind.Temporary && context.IsExpiredAt(DateTime.Now))
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default">Expirada</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Ativa">
+                        <MudSwitch T="bool" @bind-Value="context.Enabled" Color="Color.Success" Size="Size.Small" />
+                    </MudTd>
+                    <MudTd Style="text-align:right; white-space: nowrap;">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="@(() => EditTriggerAsync(context))" aria-label="Editar" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => RemoveTrigger(context))" aria-label="Remover" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Nenhuma notificação — a regra grava, mas não avisa ninguém.
+                    </MudText>
+                </NoRecordsContent>
+            </MudTable>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Class="mt-2"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="AddTriggerAsync">
+                Adicionar notificação
+            </MudButton>
+
+            <MudText Typo="Typo.subtitle2" Class="mt-4">Antiflood</MudText>
+            <div class="d-flex align-center flex-wrap gap-4">
+                <MudSwitch T="bool" @bind-Value="_grouping" Label="Agrupar notificações" Color="Color.Primary" />
+                <MudNumericField T="int" @bind-Value="_windowMinutes" Label="Intervalo do resumo (min)"
+                                 Min="1" Max="120" Disabled="@(!_grouping)" Style="max-width: 200px;" />
+            </div>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Com o agrupamento, cada contato recebe no máximo um resumo por intervalo (ex.: pessoas a
+                cada 3 min, gatos e cães a cada 30 min). Sem agrupamento, cada captura gera uma mensagem
+                imediata.
+            </MudText>
 
             <MudSwitch T="bool" @bind-Value="Rule.Enabled" Label="Regra ativa" Color="Color.Success"
-                       Class="mt-2" />
+                       Class="mt-3" />
         </MudForm>
     </DialogContent>
     <DialogActions>
@@ -77,6 +134,7 @@
     [CascadingParameter]
     private IMudDialogInstance MudDialog { get; set; } = default!;
 
+    /// <summary>Edited in place (the page passes a deep clone) — triggers included.</summary>
     [Parameter]
     public CaptureRule Rule { get; set; } = new();
 
@@ -92,17 +150,80 @@
     private bool _hasWindow;
     private TimeSpan? _activeFrom;
     private TimeSpan? _activeTo;
+    private bool _grouping;
+    private int _windowMinutes = 3;
+    private IReadOnlyList<Contact> _contacts = [];
+    private Dictionary<int, Contact> _contactsById = [];
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _selectedClasses = Rule.Classes.ToHashSet(StringComparer.OrdinalIgnoreCase);
         _hasWindow = Rule is { ActiveFrom: not null, ActiveTo: not null };
         _activeFrom = Rule.ActiveFrom?.ToTimeSpan();
         _activeTo = Rule.ActiveTo?.ToTimeSpan();
+        _grouping = Rule.GroupWindowMinutes > 0;
+        _windowMinutes = _grouping ? Rule.GroupWindowMinutes : 3;
+        await LoadContactsAsync();
+    }
+
+    private async Task LoadContactsAsync()
+    {
+        _contacts = Rule.TenantId == 0 ? [] : await ContactRepo.GetAllAsync(Rule.TenantId);
+        _contactsById = _contacts.ToDictionary(c => c.Id);
+    }
+
+    private async Task OnTenantChangedAsync(int tenantId)
+    {
+        if (tenantId == Rule.TenantId)
+            return;
+        Rule.TenantId = tenantId;
+        if (Rule.Triggers.Any(t => t.ContactIds.Count > 0))
+        {
+            foreach (var trigger in Rule.Triggers)
+                trigger.ContactIds = [];
+            Snackbar.Add("Os contatos das notificações foram limpos: pertencem a outro cliente.", Severity.Warning);
+        }
+        await LoadContactsAsync();
     }
 
     private string ClassesSummary(IReadOnlyList<string> selected) =>
         selected.Count == 0 ? "" : string.Join(", ", selected.Select(DetectableClasses.Translate));
+
+    private async Task AddTriggerAsync()
+    {
+        if (Rule.TenantId == 0)
+        {
+            Snackbar.Add("Selecione o cliente da regra antes de adicionar notificações.", Severity.Warning);
+            return;
+        }
+        var saved = await OpenTriggerDialogAsync("Nova notificação", new AlertTrigger { CaptureRuleId = Rule.Id });
+        if (saved != null)
+            Rule.Triggers.Add(saved);
+    }
+
+    private async Task EditTriggerAsync(AlertTrigger trigger)
+    {
+        var saved = await OpenTriggerDialogAsync("Editar notificação", CaptureRuleClones.Clone(trigger));
+        if (saved == null)
+            return;
+        var index = Rule.Triggers.IndexOf(trigger);
+        if (index >= 0)
+            Rule.Triggers[index] = saved;
+    }
+
+    private void RemoveTrigger(AlertTrigger trigger) => Rule.Triggers.Remove(trigger);
+
+    private async Task<AlertTrigger?> OpenTriggerDialogAsync(string title, AlertTrigger trigger)
+    {
+        var parameters = new DialogParameters<AlertTriggerDialog>
+        {
+            { d => d.Trigger, trigger },
+            { d => d.Contacts, _contacts },
+        };
+        var dialog = await DialogService.ShowAsync<AlertTriggerDialog>(title, parameters, TriggerDialogOpts);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: AlertTrigger saved } ? saved : null;
+    }
 
     private async Task SaveAsync()
     {
@@ -141,8 +262,17 @@
             Rule.ActiveTo = null;
         }
 
+        if (_grouping && _windowMinutes is < 1 or > 120)
+        {
+            Snackbar.Add("O intervalo do resumo deve ficar entre 1 e 120 minutos.", Severity.Warning);
+            return;
+        }
+        Rule.GroupWindowMinutes = _grouping ? _windowMinutes : 0;
+
         Rule.Name = Rule.Name.Trim();
         Rule.Classes = _selectedClasses.ToList();
+        foreach (var trigger in Rule.Triggers)
+            trigger.CaptureRuleId = Rule.Id;
 
         if (Rule.Id == 0)
         {
@@ -152,10 +282,13 @@
         else
         {
             await RuleRepo.UpdateAsync(Rule);
+            await RuleRepo.ReplaceTriggersAsync(Rule.Id, Rule.Triggers);
             Snackbar.Add("Regra atualizada.", Severity.Success);
         }
         MudDialog.Close(DialogResult.Ok(true));
     }
 
     private void Cancel() => MudDialog.Cancel();
+
+    private static readonly DialogOptions TriggerDialogOpts = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
 }

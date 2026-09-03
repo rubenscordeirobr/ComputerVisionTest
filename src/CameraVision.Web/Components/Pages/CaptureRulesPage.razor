@@ -1,16 +1,20 @@
 @page "/capture-settings"
 @using CameraVision.Web.Components.Dialogs
 @inject ICaptureRuleRepository RuleRepo
+@inject IContactRepository ContactRepo
 @inject ITenantRepository TenantRepo
-@inject ISettingsRepository SettingsRepo
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <PageTitle>Regras de Captura — CameraVision</PageTitle>
 
-<div class="d-flex align-center mb-4">
+<div class="d-flex align-center mb-4 flex-wrap gap-2">
     <MudText Typo="Typo.h4">Regras de Captura</MudText>
     <MudSpacer />
+    <MudButton Variant="Variant.Outlined" Color="Color.Warning" Disabled="@(_rules.Count == 0)"
+               StartIcon="@Icons.Material.Filled.NotificationAdd" OnClick="AddTemporaryNoticeAsync">
+        Aviso temporário
+    </MudButton>
     <MudButton Variant="Variant.Filled" Color="Color.Primary"
                StartIcon="@Icons.Material.Filled.Add" OnClick="AddRuleAsync">
         Nova regra
@@ -18,10 +22,23 @@
 </div>
 
 <MudAlert Severity="Severity.Info" Class="mb-4" Style="max-width: 1000px;">
-    Cada regra define quais objetos são gravados e quais canais recebem alerta —
-    por exemplo, "gato → e-mail" e "pessoa → WhatsApp". O processador de detecção
-    aplica a união das regras ativas.
+    Cada regra define quais objetos são gravados, quem é avisado e quando (Notificações) e o
+    antiflood das notificações — por exemplo, "pessoa → WhatsApp à noite" e "gato → e-mail sempre".
+    O processador de detecção aplica a união das regras ativas.
 </MudAlert>
+
+@if (_runningTemporary > 0)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" Style="max-width: 1000px;">
+        <div class="d-flex align-center flex-wrap gap-3">
+            <span>Aviso temporário ativo em @_runningTemporary regra(s).</span>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                       OnClick="EndAllTemporaryAsync">
+                Encerrar todos
+            </MudButton>
+        </div>
+    </MudAlert>
+}
 
 <MudPaper>
     <MudTable Items="_rules" Hover="true" Loading="_loading" LoadingProgressColor="Color.Primary">
@@ -35,8 +52,9 @@
             <MudTh>Confiança</MudTh>
             <MudTh>Segmento</MudTh>
             <MudTh>Espera</MudTh>
-            <MudTh>Horário</MudTh>
-            <MudTh>Alertas</MudTh>
+            <MudTh>Grava em</MudTh>
+            <MudTh>Notificações</MudTh>
+            <MudTh>Antiflood</MudTh>
             <MudTh>Ativa</MudTh>
             <MudTh Style="text-align:right">Ações</MudTh>
         </HeaderContent>
@@ -57,7 +75,7 @@
             <MudTd DataLabel="Confiança">@context.ConfidenceThreshold.ToString("P0")</MudTd>
             <MudTd DataLabel="Segmento">@($"{context.MaxSegmentSeconds} s")</MudTd>
             <MudTd DataLabel="Espera">@($"{context.LingerSeconds:0.#} s")</MudTd>
-            <MudTd DataLabel="Horário">
+            <MudTd DataLabel="Grava em">
                 @if (context.IsAlwaysActive)
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">Sempre</MudText>
@@ -69,24 +87,44 @@
                     </MudChip>
                 }
             </MudTd>
-            <MudTd DataLabel="Alertas">
-                @if (context.NotifyEmail)
-                {
-                    <MudTooltip Text="Envia e-mail">
-                        <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" Color="Color.Primary" />
-                    </MudTooltip>
-                }
-                @if (context.NotifyWhatsApp)
-                {
-                    <MudTooltip Text="Envia WhatsApp (futuro)">
-                        <MudIcon Icon="@Icons.Material.Filled.Sms" Size="Size.Small" Color="Color.Success" />
-                    </MudTooltip>
-                }
-                @if (!context.NotifyEmail && !context.NotifyWhatsApp)
+            <MudTd DataLabel="Notificações" Style="white-space: nowrap;">
+                @if (context.Triggers.Count == 0)
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
                 }
+                @foreach (var channel in ChannelUi.All)
+                {
+                    var ofChannel = context.Triggers.Where(t => t.Channel == channel).ToList();
+                    if (ofChannel.Count == 0)
+                        continue;
+                    var active = ofChannel.Count(t => t.Enabled && !t.IsExpiredAt(_now));
+                    <MudTooltip>
+                        <ChildContent>
+                            <MudBadge Content="@active" Color="@ChannelUi.ChannelColor(channel)" Overlap="true"
+                                      Visible="@(active > 0)" Class="mr-3">
+                                <MudIcon Icon="@ChannelUi.Icon(channel)" Size="Size.Small"
+                                         Color="@(active > 0 ? ChannelUi.ChannelColor(channel) : Color.Default)" />
+                            </MudBadge>
+                        </ChildContent>
+                        <TooltipContent>
+                            @foreach (var trigger in ofChannel)
+                            {
+                                <div>@TriggerText.Summary(trigger, _contactsById, _now)</div>
+                            }
+                        </TooltipContent>
+                    </MudTooltip>
+                }
+                @foreach (var trigger in context.Triggers.Where(t => TriggerText.IsRunningTemporary(t, _now)))
+                {
+                    <MudTooltip Text="@($"{TriggerText.Schedule(trigger, _now)} · {TriggerText.Contacts(trigger, _contactsById)} — clique no X para encerrar")">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
+                                 Icon="@Icons.Material.Filled.Timer" OnClose="@(() => EndTemporaryAsync(trigger))">
+                            Temporário · @ChannelUi.Label(trigger.Channel)
+                        </MudChip>
+                    </MudTooltip>
+                }
             </MudTd>
+            <MudTd DataLabel="Antiflood">@TriggerText.Window(context.GroupWindowMinutes)</MudTd>
             <MudTd DataLabel="Ativa">
                 <MudSwitch T="bool" Value="context.Enabled" Color="Color.Success"
                            ValueChanged="@((bool value) => ToggleEnabledAsync(context, value))" />
@@ -104,41 +142,6 @@
     </MudTable>
 </MudPaper>
 
-@if (_alertTenantId != null)
-{
-<MudPaper Class="pa-6 mt-4" Style="max-width: 1000px;">
-    <MudText Typo="Typo.h6" Class="mb-2">Antiflood de alertas</MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-        Configuração do cliente: com o agrupamento ativado, os alertas de captura são
-        enviados como um único resumo por período (o primeiro aviso após um período calmo
-        ainda sai em até 30 segundos; os demais entram no próximo resumo).
-    </MudText>
-    @if (_isSuperAdmin)
-    {
-        <MudSelect T="int?" Value="_alertTenantId" ValueChanged="OnAlertTenantChangedAsync"
-                   Label="Cliente" Class="mb-3" Style="max-width: 360px;"
-                   AnchorOrigin="Origin.BottomCenter">
-            @foreach (var tenant in _tenants)
-            {
-                <MudSelectItem T="int?" Value="@((int?)tenant.Id)">@tenant.Name</MudSelectItem>
-            }
-        </MudSelect>
-    }
-    <div class="d-flex align-center flex-wrap gap-4">
-        <MudSwitch T="bool" @bind-Value="_alertSettings.GroupingEnabled"
-                   Label="Agrupar alertas de captura" Color="Color.Primary" />
-        <MudNumericField T="int" @bind-Value="_alertSettings.GroupWindowMinutes"
-                         Label="Intervalo do resumo (min)" Min="1" Max="120"
-                         Disabled="@(!_alertSettings.GroupingEnabled)"
-                         Style="max-width: 200px;" />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAlertSettingsAsync">
-            Salvar
-        </MudButton>
-    </div>
-</MudPaper>
-}
-
 @code {
     [CascadingParameter]
     private Task<AuthenticationState> AuthState { get; set; } = default!;
@@ -146,12 +149,14 @@
     private IReadOnlyList<CaptureRule> _rules = [];
     private IReadOnlyList<Tenant> _tenants = [];
     private Dictionary<int, string> _tenantNames = [];
-    private CaptureAlertSettings _alertSettings = new();
+    private IReadOnlyList<Contact> _contacts = [];
+    private Dictionary<int, Contact> _contactsById = [];
     private bool _loading = true;
     private bool _isSuperAdmin;
     private int? _tenantFilter;
     private int? _ownTenantId;
-    private int? _alertTenantId;
+    private DateTime _now = DateTime.Now;
+    private int _runningTemporary;
 
     protected override async Task OnInitializedAsync()
     {
@@ -163,50 +168,27 @@
         {
             _tenants = await TenantRepo.GetAllAsync();
             _tenantNames = _tenants.ToDictionary(t => t.Id, t => t.Name);
-            _alertTenantId = _tenants.FirstOrDefault()?.Id;
         }
-        else
-        {
-            _alertTenantId = _ownTenantId;
-        }
-        await LoadAlertSettingsAsync();
         await LoadAsync();
     }
 
     private string TenantNameOf(int tenantId) => _tenantNames.GetValueOrDefault(tenantId, "—");
 
-    private async Task LoadAlertSettingsAsync()
-    {
-        if (_alertTenantId is { } tenantId)
-            _alertSettings = await SettingsRepo.GetCaptureAlertSettingsAsync(tenantId);
-    }
-
-    private async Task OnAlertTenantChangedAsync(int? tenantId)
-    {
-        _alertTenantId = tenantId;
-        await LoadAlertSettingsAsync();
-    }
-
-    private async Task SaveAlertSettingsAsync()
-    {
-        if (_alertTenantId is not { } tenantId)
-            return;
-        _alertSettings.TenantId = tenantId;
-        await SettingsRepo.SaveCaptureAlertSettingsAsync(_alertSettings);
-        Snackbar.Add("Configurações de antiflood salvas.", Severity.Success);
-    }
-
     private async Task LoadAsync()
     {
         _loading = true;
         _rules = await RuleRepo.GetAllAsync(_tenantFilter);
+        _contacts = await ContactRepo.GetAllAsync(_tenantFilter);
+        _contactsById = _contacts.ToDictionary(c => c.Id);
+        _now = DateTime.Now;
+        _runningTemporary = _rules.Count(r => r.Triggers.Any(t => TriggerText.IsRunningTemporary(t, _now)));
         _loading = false;
     }
 
     private async Task ToggleEnabledAsync(CaptureRule rule, bool enabled)
     {
         rule.Enabled = enabled;
-        await RuleRepo.UpdateAsync(rule);
+        await RuleRepo.UpdateAsync(rule); // scalars only — the rule's notifications are untouched
     }
 
     private async Task AddRuleAsync()
@@ -215,42 +197,21 @@
         {
             TenantId = _isSuperAdmin ? _tenants.FirstOrDefault()?.Id ?? 0 : _ownTenantId ?? 0,
         };
+        await OpenRuleDialogAsync("Nova regra", rule);
+    }
+
+    private async Task EditRuleAsync(CaptureRule rule) =>
+        await OpenRuleDialogAsync("Editar regra", CaptureRuleClones.Clone(rule));
+
+    private async Task OpenRuleDialogAsync(string title, CaptureRule rule)
+    {
         var parameters = new DialogParameters<CaptureRuleDialog>
         {
             { d => d.Rule, rule },
             { d => d.ShowTenantSelect, _isSuperAdmin },
             { d => d.Tenants, _tenants },
         };
-        var dialog = await DialogService.ShowAsync<CaptureRuleDialog>("Nova regra", parameters, DialogOpts);
-        if ((await dialog.Result) is { Canceled: false })
-            await LoadAsync();
-    }
-
-    private async Task EditRuleAsync(CaptureRule rule)
-    {
-        var copy = new CaptureRule
-        {
-            Id = rule.Id,
-            TenantId = rule.TenantId,
-            Name = rule.Name,
-            Enabled = rule.Enabled,
-            Classes = [.. rule.Classes],
-            ConfidenceThreshold = rule.ConfidenceThreshold,
-            MaxSegmentSeconds = rule.MaxSegmentSeconds,
-            LingerSeconds = rule.LingerSeconds,
-            NotifyEmail = rule.NotifyEmail,
-            NotifyWhatsApp = rule.NotifyWhatsApp,
-            ActiveFrom = rule.ActiveFrom,
-            ActiveTo = rule.ActiveTo,
-            CreatedAt = rule.CreatedAt,
-        };
-        var parameters = new DialogParameters<CaptureRuleDialog>
-        {
-            { d => d.Rule, copy },
-            { d => d.ShowTenantSelect, _isSuperAdmin },
-            { d => d.Tenants, _tenants },
-        };
-        var dialog = await DialogService.ShowAsync<CaptureRuleDialog>("Editar regra", parameters, DialogOpts);
+        var dialog = await DialogService.ShowAsync<CaptureRuleDialog>(title, parameters, DialogOpts);
         if ((await dialog.Result) is { Canceled: false })
             await LoadAsync();
     }
@@ -269,5 +230,40 @@
         }
     }
 
-    private static readonly DialogOptions DialogOpts = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+    private async Task AddTemporaryNoticeAsync()
+    {
+        var parameters = new DialogParameters<TemporaryNoticeDialog>
+        {
+            { d => d.Contacts, _contacts },
+            { d => d.Rules, _rules },
+            { d => d.ShowTenantSelect, _isSuperAdmin },
+            { d => d.Tenants, _tenants },
+            { d => d.TenantId, _isSuperAdmin ? _tenants.FirstOrDefault()?.Id ?? 0 : _ownTenantId ?? 0 },
+        };
+        var dialog = await DialogService.ShowAsync<TemporaryNoticeDialog>("Aviso temporário", parameters, TemporaryDialogOpts);
+        if ((await dialog.Result) is { Canceled: false })
+            await LoadAsync();
+    }
+
+    private async Task EndTemporaryAsync(AlertTrigger trigger)
+    {
+        await RuleRepo.DeleteTriggersAsync([trigger.Id]);
+        Snackbar.Add("Aviso temporário encerrado.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private async Task EndAllTemporaryAsync()
+    {
+        var ids = _rules
+            .SelectMany(r => r.Triggers)
+            .Where(t => TriggerText.IsRunningTemporary(t, DateTime.Now))
+            .Select(t => t.Id)
+            .ToList();
+        await RuleRepo.DeleteTriggersAsync(ids);
+        Snackbar.Add("Avisos temporários encerrados.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private static readonly DialogOptions DialogOpts = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+    private static readonly DialogOptions TemporaryDialogOpts = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
 }

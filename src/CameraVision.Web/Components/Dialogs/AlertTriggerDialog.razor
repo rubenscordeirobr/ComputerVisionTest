@@ -1,0 +1,246 @@
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle2">Canal</MudText>
+        <MudRadioGroup T="AlertChannel" Value="Trigger.Channel" ValueChanged="OnChannelChanged">
+            <MudRadio T="AlertChannel" Value="AlertChannel.Email" Color="Color.Primary">E-mail</MudRadio>
+            <MudRadio T="AlertChannel" Value="AlertChannel.WhatsApp" Color="Color.Success">WhatsApp</MudRadio>
+        </MudRadioGroup>
+
+        <MudSelect T="int" MultiSelection="true" @bind-SelectedValues="_selectedContacts"
+                   Label="Contatos" Class="mt-3" AnchorOrigin="Origin.BottomCenter"
+                   MultiSelectionTextFunc="ContactsSummary">
+            @foreach (var contact in EligibleContacts)
+            {
+                <MudSelectItem T="int" Value="@contact.Id">
+                    @contact.Name (@contact.AddressFor(Trigger.Channel))
+                </MudSelectItem>
+            }
+        </MudSelect>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Só aparecem contatos com @ChannelUi.AddressNoun(Trigger.Channel) cadastrado — cadastre em
+            <MudLink Href="/contacts" Target="_blank">Contatos</MudLink>.
+        </MudText>
+        @if (EligibleContacts.Count == 0)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                Nenhum contato com @ChannelUi.AddressNoun(Trigger.Channel) cadastrado para este cliente.
+            </MudAlert>
+        }
+
+        <MudText Typo="Typo.subtitle2" Class="mt-4">Quando avisar</MudText>
+        @if (!LockKind)
+        {
+            <MudRadioGroup T="AlertTriggerKind" @bind-Value="_kind">
+                <MudRadio T="AlertTriggerKind" Value="AlertTriggerKind.Always" Color="Color.Primary">Sempre</MudRadio>
+                <MudRadio T="AlertTriggerKind" Value="AlertTriggerKind.Weekly" Color="Color.Primary">Dias e horários</MudRadio>
+                <MudRadio T="AlertTriggerKind" Value="AlertTriggerKind.Temporary" Color="Color.Warning">Temporário</MudRadio>
+            </MudRadioGroup>
+        }
+
+        @if (_kind == AlertTriggerKind.Weekly)
+        {
+            <div class="d-flex flex-wrap gap-1 mt-2">
+                @foreach (var (day, label) in TriggerText.DayLabels)
+                {
+                    var selected = (_days & day) != 0;
+                    <MudChip T="string" Variant="@(selected ? Variant.Filled : Variant.Outlined)"
+                             Color="@(selected ? Color.Primary : Color.Default)"
+                             OnClick="@(() => ToggleDay(day))">@label</MudChip>
+                }
+            </div>
+            <div class="d-flex gap-1 mt-1">
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => _days = DaysOfWeek.Weekdays)">Dias úteis</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => _days = DaysOfWeek.Weekend)">Fim de semana</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => _days = DaysOfWeek.All)">Todos</MudButton>
+            </div>
+            <MudSwitch T="bool" @bind-Value="_allDay" Label="Dia inteiro" Color="Color.Primary" Class="mt-2" />
+            @if (!_allDay)
+            {
+                <MudGrid Spacing="2">
+                    <MudItem xs="6">
+                        <MudTimePicker @bind-Time="_start" Label="Início" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudTimePicker @bind-Time="_end" Label="Fim" />
+                    </MudItem>
+                </MudGrid>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Fim igual ou menor que o início atravessa a meia-noite: 18:00 até 00:00 vai até o fim do dia;
+                    22:00 até 06:00 entra na madrugada seguinte (os dias marcados são os dias em que o horário começa).
+                </MudText>
+            }
+        }
+
+        @if (_kind == AlertTriggerKind.Temporary)
+        {
+            <MudRadioGroup T="bool" @bind-Value="_untilDisabled">
+                <MudRadio T="bool" Value="true" Color="Color.Warning">Até eu desativar</MudRadio>
+                <MudRadio T="bool" Value="false" Color="Color.Warning">Até data e hora</MudRadio>
+            </MudRadioGroup>
+            @if (!_untilDisabled)
+            {
+                <MudGrid Spacing="2">
+                    <MudItem xs="7">
+                        <MudDatePicker @bind-Date="_expiresDate" Label="Data de término" MinDate="DateTime.Today"
+                                       DateFormat="dd/MM/yyyy" PickerVariant="PickerVariant.Dialog" />
+                    </MudItem>
+                    <MudItem xs="5">
+                        <MudTimePicker @bind-Time="_expiresTime" Label="Hora" />
+                    </MudItem>
+                </MudGrid>
+            }
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @(Trigger.ActiveFrom is { } from ? $"Ativo desde {from:dd/MM HH:mm}." : "Passa a valer assim que for salvo.")
+                Encerre a qualquer momento pelo X do aviso na lista de regras.
+            </MudText>
+        }
+
+        <MudSwitch T="bool" @bind-Value="Trigger.Enabled" Label="Ativa" Color="Color.Success" Class="mt-3" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Confirm">Confirmar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Edited in place — pass a clone so cancelling leaves the original untouched.</summary>
+    [Parameter]
+    public AlertTrigger Trigger { get; set; } = new();
+
+    /// <summary>Contacts of the rule's tenant.</summary>
+    [Parameter]
+    public IReadOnlyList<Contact> Contacts { get; set; } = [];
+
+    /// <summary>Hides the kind selector (the "Aviso temporário" quick action).</summary>
+    [Parameter]
+    public bool LockKind { get; set; }
+
+    private IReadOnlyCollection<int> _selectedContacts = [];
+    private AlertTriggerKind _kind;
+    private DaysOfWeek _days = DaysOfWeek.All;
+    private bool _allDay = true;
+    private TimeSpan? _start;
+    private TimeSpan? _end;
+    private bool _untilDisabled = true;
+    private DateTime? _expiresDate;
+    private TimeSpan? _expiresTime;
+
+    private IReadOnlyList<Contact> EligibleContacts =>
+        Contacts.Where(c => c.HasAddressFor(Trigger.Channel)).ToList();
+
+    protected override void OnInitialized()
+    {
+        _selectedContacts = Trigger.ContactIds.ToHashSet();
+        _kind = Trigger.Kind;
+        _days = Trigger.Kind == AlertTriggerKind.Weekly && Trigger.Days != DaysOfWeek.None
+            ? Trigger.Days
+            : DaysOfWeek.All;
+        _allDay = Trigger.IsAllDay;
+        _start = Trigger.StartTime?.ToTimeSpan();
+        _end = Trigger.EndTime?.ToTimeSpan();
+        _untilDisabled = Trigger.ExpiresAt == null;
+        _expiresDate = Trigger.ExpiresAt?.Date;
+        _expiresTime = Trigger.ExpiresAt?.TimeOfDay;
+    }
+
+    private string ContactsSummary(IReadOnlyList<string> selected)
+    {
+        var byId = Contacts.ToDictionary(c => c.Id);
+        return string.Join(", ", selected.Select(s =>
+            int.TryParse(s, out var id) && byId.TryGetValue(id, out var contact) ? contact.Name : s));
+    }
+
+    private void OnChannelChanged(AlertChannel channel)
+    {
+        Trigger.Channel = channel;
+        // Keep the contacts that also have an address on the new channel.
+        var eligible = EligibleContacts.Select(c => c.Id).ToHashSet();
+        _selectedContacts = _selectedContacts.Where(eligible.Contains).ToHashSet();
+    }
+
+    private void ToggleDay(DaysOfWeek day) => _days ^= day;
+
+    private void Confirm()
+    {
+        if (_selectedContacts.Count == 0)
+        {
+            Snackbar.Add("Selecione ao menos um contato.", Severity.Warning);
+            return;
+        }
+
+        DateTime? expiresAt = null;
+        switch (_kind)
+        {
+            case AlertTriggerKind.Weekly:
+                if (_days == DaysOfWeek.None)
+                {
+                    Snackbar.Add("Selecione ao menos um dia da semana.", Severity.Warning);
+                    return;
+                }
+                if (!_allDay)
+                {
+                    if (_start == null || _end == null)
+                    {
+                        Snackbar.Add("Informe o horário de início e de fim.", Severity.Warning);
+                        return;
+                    }
+                    if (_start == _end)
+                    {
+                        Snackbar.Add("Início e fim não podem ser iguais.", Severity.Warning);
+                        return;
+                    }
+                }
+                break;
+            case AlertTriggerKind.Temporary when !_untilDisabled:
+                if (_expiresDate == null || _expiresTime == null)
+                {
+                    Snackbar.Add("Informe a data e a hora de término.", Severity.Warning);
+                    return;
+                }
+                expiresAt = _expiresDate.Value.Date + _expiresTime.Value;
+                if (expiresAt <= DateTime.Now)
+                {
+                    Snackbar.Add("O término precisa ser uma data futura.", Severity.Warning);
+                    return;
+                }
+                break;
+        }
+
+        Trigger.Kind = _kind;
+        Trigger.ContactIds = _selectedContacts.ToList();
+        switch (_kind)
+        {
+            case AlertTriggerKind.Weekly:
+                Trigger.Days = _days;
+                Trigger.StartTime = _allDay ? null : TimeOnly.FromTimeSpan(_start!.Value);
+                Trigger.EndTime = _allDay ? null : TimeOnly.FromTimeSpan(_end!.Value);
+                Trigger.ActiveFrom = null;
+                Trigger.ExpiresAt = null;
+                break;
+            case AlertTriggerKind.Temporary:
+                Trigger.Days = DaysOfWeek.All;
+                Trigger.StartTime = null;
+                Trigger.EndTime = null;
+                Trigger.ActiveFrom ??= DateTime.Now;
+                Trigger.ExpiresAt = expiresAt;
+                break;
+            default:
+                Trigger.Days = DaysOfWeek.All;
+                Trigger.StartTime = null;
+                Trigger.EndTime = null;
+                Trigger.ActiveFrom = null;
+                Trigger.ExpiresAt = null;
+                break;
+        }
+
+        MudDialog.Close(DialogResult.Ok(Trigger));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

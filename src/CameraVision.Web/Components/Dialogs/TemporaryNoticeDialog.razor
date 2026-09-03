@@ -1,0 +1,218 @@
+@inject ICaptureRuleRepository RuleRepo
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Avisa os contatos escolhidos sobre as capturas das regras selecionadas a partir de agora,
+            até você encerrar (X do aviso na lista de regras) ou até a data e hora informadas. Quem já
+            recebe pela própria regra não recebe em dobro.
+        </MudText>
+
+        @if (ShowTenantSelect)
+        {
+            <MudSelect T="int" Value="_tenantId" ValueChanged="OnTenantChanged" Label="Cliente" Class="mb-3"
+                       AnchorOrigin="Origin.BottomCenter">
+                @foreach (var tenant in Tenants)
+                {
+                    <MudSelectItem T="int" Value="@tenant.Id">@tenant.Name</MudSelectItem>
+                }
+            </MudSelect>
+        }
+
+        <MudText Typo="Typo.subtitle2">Canal</MudText>
+        <MudRadioGroup T="AlertChannel" Value="_channel" ValueChanged="OnChannelChanged">
+            <MudRadio T="AlertChannel" Value="AlertChannel.WhatsApp" Color="Color.Success">WhatsApp</MudRadio>
+            <MudRadio T="AlertChannel" Value="AlertChannel.Email" Color="Color.Primary">E-mail</MudRadio>
+        </MudRadioGroup>
+
+        <MudSelect T="int" MultiSelection="true" @bind-SelectedValues="_selectedContacts"
+                   Label="Contatos" Class="mt-3" AnchorOrigin="Origin.BottomCenter"
+                   MultiSelectionTextFunc="ContactsSummary">
+            @foreach (var contact in EligibleContacts)
+            {
+                <MudSelectItem T="int" Value="@contact.Id">
+                    @contact.Name (@contact.AddressFor(_channel))
+                </MudSelectItem>
+            }
+        </MudSelect>
+        @if (EligibleContacts.Count == 0)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                Nenhum contato com @ChannelUi.AddressNoun(_channel) cadastrado — cadastre em
+                <MudLink Href="/contacts" Target="_blank">Contatos</MudLink>.
+            </MudAlert>
+        }
+
+        <MudText Typo="Typo.subtitle2" Class="mt-4">Término</MudText>
+        <MudRadioGroup T="bool" @bind-Value="_untilDisabled">
+            <MudRadio T="bool" Value="true" Color="Color.Warning">Até eu desativar</MudRadio>
+            <MudRadio T="bool" Value="false" Color="Color.Warning">Até data e hora</MudRadio>
+        </MudRadioGroup>
+        @if (!_untilDisabled)
+        {
+            <MudGrid Spacing="2">
+                <MudItem xs="7">
+                    <MudDatePicker @bind-Date="_expiresDate" Label="Data de término" MinDate="DateTime.Today"
+                                   DateFormat="dd/MM/yyyy" PickerVariant="PickerVariant.Dialog" />
+                </MudItem>
+                <MudItem xs="5">
+                    <MudTimePicker @bind-Time="_expiresTime" Label="Hora" />
+                </MudItem>
+            </MudGrid>
+        }
+
+        <MudSelect T="int" MultiSelection="true" @bind-SelectedValues="_selectedRules"
+                   Label="Regras" Class="mt-4" AnchorOrigin="Origin.BottomCenter"
+                   MultiSelectionTextFunc="RulesSummary">
+            @foreach (var rule in TenantRules)
+            {
+                <MudSelectItem T="int" Value="@rule.Id">
+                    @rule.Name@(rule.Enabled ? "" : " (desativada)")
+                </MudSelectItem>
+            }
+        </MudSelect>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Um aviso temporário é criado em cada regra selecionada.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@_saving">Cancelar</MudButton>
+        <MudButton Color="Color.Warning" Variant="Variant.Filled" OnClick="ActivateAsync" Disabled="@_saving"
+                   StartIcon="@Icons.Material.Filled.NotificationAdd">
+            Ativar aviso
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Contacts visible to the editor (every tenant's for a SuperAdmin).</summary>
+    [Parameter]
+    public IReadOnlyList<Contact> Contacts { get; set; } = [];
+
+    /// <summary>Rules visible to the editor (every tenant's for a SuperAdmin).</summary>
+    [Parameter]
+    public IReadOnlyList<CaptureRule> Rules { get; set; } = [];
+
+    [Parameter]
+    public bool ShowTenantSelect { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<Tenant> Tenants { get; set; } = [];
+
+    /// <summary>Initial tenant (the editor's own, or the first one for a SuperAdmin).</summary>
+    [Parameter]
+    public int TenantId { get; set; }
+
+    private int _tenantId;
+    private AlertChannel _channel = AlertChannel.WhatsApp;
+    private IReadOnlyCollection<int> _selectedContacts = [];
+    private IReadOnlyCollection<int> _selectedRules = [];
+    private bool _untilDisabled = true;
+    private DateTime? _expiresDate;
+    private TimeSpan? _expiresTime;
+    private bool _saving;
+
+    private IReadOnlyList<Contact> EligibleContacts =>
+        Contacts.Where(c => c.TenantId == _tenantId && c.HasAddressFor(_channel)).ToList();
+
+    private IReadOnlyList<CaptureRule> TenantRules =>
+        Rules.Where(r => r.TenantId == _tenantId).ToList();
+
+    protected override void OnInitialized()
+    {
+        _tenantId = TenantId;
+        SelectAllEnabledRules();
+    }
+
+    private void SelectAllEnabledRules() =>
+        _selectedRules = TenantRules.Where(r => r.Enabled).Select(r => r.Id).ToHashSet();
+
+    private void OnTenantChanged(int tenantId)
+    {
+        _tenantId = tenantId;
+        _selectedContacts = [];
+        SelectAllEnabledRules();
+    }
+
+    private void OnChannelChanged(AlertChannel channel)
+    {
+        _channel = channel;
+        var eligible = EligibleContacts.Select(c => c.Id).ToHashSet();
+        _selectedContacts = _selectedContacts.Where(eligible.Contains).ToHashSet();
+    }
+
+    private string ContactsSummary(IReadOnlyList<string> selected)
+    {
+        var byId = Contacts.ToDictionary(c => c.Id);
+        return string.Join(", ", selected.Select(s =>
+            int.TryParse(s, out var id) && byId.TryGetValue(id, out var contact) ? contact.Name : s));
+    }
+
+    private string RulesSummary(IReadOnlyList<string> selected)
+    {
+        var byId = Rules.ToDictionary(r => r.Id);
+        return string.Join(", ", selected.Select(s =>
+            int.TryParse(s, out var id) && byId.TryGetValue(id, out var rule) ? rule.Name : s));
+    }
+
+    private async Task ActivateAsync()
+    {
+        if (_selectedContacts.Count == 0)
+        {
+            Snackbar.Add("Selecione ao menos um contato.", Severity.Warning);
+            return;
+        }
+        if (_selectedRules.Count == 0)
+        {
+            Snackbar.Add("Selecione ao menos uma regra.", Severity.Warning);
+            return;
+        }
+
+        DateTime? expiresAt = null;
+        if (!_untilDisabled)
+        {
+            if (_expiresDate == null || _expiresTime == null)
+            {
+                Snackbar.Add("Informe a data e a hora de término.", Severity.Warning);
+                return;
+            }
+            expiresAt = _expiresDate.Value.Date + _expiresTime.Value;
+            if (expiresAt <= DateTime.Now)
+            {
+                Snackbar.Add("O término precisa ser uma data futura.", Severity.Warning);
+                return;
+            }
+        }
+
+        _saving = true;
+        try
+        {
+            var now = DateTime.Now;
+            foreach (var ruleId in _selectedRules)
+            {
+                await RuleRepo.SaveTriggerAsync(new AlertTrigger
+                {
+                    CaptureRuleId = ruleId,
+                    Channel = _channel,
+                    ContactIds = _selectedContacts.ToList(),
+                    Kind = AlertTriggerKind.Temporary,
+                    Days = DaysOfWeek.All,
+                    ActiveFrom = now,
+                    ExpiresAt = expiresAt,
+                });
+            }
+            Snackbar.Add($"Aviso temporário ativado em {_selectedRules.Count} regra(s).", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -10,7 +10,7 @@
 {
     <MudSelect T="int?" @bind-Value="_selectedTenantId" Label="Cliente" Class="mb-4"
                Style="max-width: 360px;" AnchorOrigin="Origin.BottomCenter"
-               HelperText="Os destinatários de cada canal pertencem ao cliente selecionado.">
+               HelperText="O interruptor de cada canal pertence ao cliente selecionado.">
         @foreach (var tenant in _tenants)
         {
             <MudSelectItem T="int?" Value="@((int?)tenant.Id)">@tenant.Name</MudSelectItem>

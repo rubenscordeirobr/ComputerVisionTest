@@ -4,46 +4,31 @@
 @if (Channel == AlertChannel.Email)
 {
     <MudAlert Severity="Severity.Info" Class="mb-4">
-        Alertas por e-mail são enviados automaticamente quando uma nova captura corresponde
-        às regras (requer SMTP configurado em <b>Sistema</b>).
+        Interruptor geral do canal de e-mail (requer SMTP configurado em <b>Sistema</b>).
+        Quem recebe é definido pelos <MudLink Href="/contacts">Contatos</MudLink>: cada regra
+        escolhe quais contatos avisar e quando, e os alertas de saúde das câmeras vão para os
+        contatos marcados com "Recebe alertas de saúde das câmeras".
     </MudAlert>
 }
 else
 {
     <MudAlert Severity="Severity.Info" Class="mb-4">
-        Alertas por WhatsApp são enviados quando uma nova captura corresponde às regras
-        (requer a Evolution API configurada e o número pareado em <b>Sistema</b>).
+        Interruptor geral do canal de WhatsApp (requer a Evolution API configurada e o número
+        pareado em <b>Sistema</b>). Quem recebe é definido pelos
+        <MudLink Href="/contacts">Contatos</MudLink>: cada regra escolhe quais contatos avisar e
+        quando, e os alertas de saúde das câmeras vão para os contatos marcados com "Recebe
+        alertas de saúde das câmeras".
     </MudAlert>
 }
 
 <MudSwitch T="bool" @bind-Value="_settings.Enabled" Label="Ativado" Color="Color.Success" />
-
-<MudText Typo="Typo.subtitle1" Class="mt-4 mb-1">Destinatários</MudText>
-<div class="d-flex align-start gap-2">
-    <MudTextField T="string" @bind-Value="_newRecipient" Label="@RecipientLabel" Immediate="true"
-                  Error="@(_recipientError != null)" ErrorText="@_recipientError"
-                  OnKeyDown="OnRecipientKeyDown" Style="max-width: 360px;" />
-    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2"
-               StartIcon="@Icons.Material.Filled.Add" OnClick="AddRecipient">
-        Adicionar
-    </MudButton>
-</div>
-<div class="d-flex flex-wrap gap-1 mt-2">
-    @if (_settings.Recipients.Count == 0)
-    {
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">Nenhum destinatário adicionado.</MudText>
-    }
-    @foreach (var recipient in _settings.Recipients)
-    {
-        <MudChip T="string" Color="Color.Default" OnClose="@(() => RemoveRecipient(recipient))">
-            @recipient
-        </MudChip>
-    }
-</div>
+<MudText Typo="Typo.caption" Class="mud-text-secondary">
+    Desligado, nenhuma notificação sai por este canal — nem as das regras nem as de saúde das câmeras.
+</MudText>
 
 <MudText Typo="Typo.body2" Class="mud-text-secondary mt-4">
-    Quais objetos disparam alerta neste canal é definido por regra em
-    <MudLink Href="/capture-settings">Regras de Captura</MudLink>.
+    Quem é avisado por cada regra (e em quais dias e horários) é definido em
+    <MudLink Href="/capture-settings">Regras de Captura</MudLink> → Notificações.
 </MudText>
 
 <div class="d-flex justify-end mt-6">
@@ -57,13 +42,11 @@ else
     [Parameter, EditorRequired]
     public AlertChannel Channel { get; set; }
 
-    /// <summary>Recipients belong to a tenant (the SuperAdmin picks one on the page).</summary>
+    /// <summary>The switch belongs to a tenant (the SuperAdmin picks one on the page).</summary>
     [Parameter, EditorRequired]
     public int TenantId { get; set; }
 
     private AlertSettings _settings = new();
-    private string _newRecipient = "";
-    private string? _recipientError;
     private int _loadedTenantId = -1;
 
     protected override async Task OnParametersSetAsync()
@@ -73,56 +56,6 @@ else
         _loadedTenantId = TenantId;
         _settings = await SettingsRepo.GetAlertSettingsAsync(TenantId, Channel);
     }
-
-    private string RecipientLabel => Channel == AlertChannel.Email
-        ? "E-mail do destinatário"
-        : "Número do WhatsApp (ex.: +5549999999999)";
-
-    private void OnRecipientKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-            AddRecipient();
-    }
-
-    private void AddRecipient()
-    {
-        _recipientError = null;
-        var value = _newRecipient.Trim();
-        if (value.Length == 0)
-            return;
-
-        if (Channel == AlertChannel.Email)
-        {
-            if (!System.Net.Mail.MailAddress.TryCreate(value, out _))
-            {
-                _recipientError = "E-mail inválido.";
-                return;
-            }
-        }
-        else
-        {
-            value = NormalizePhone(value);
-            if (!System.Text.RegularExpressions.Regex.IsMatch(value, @"^\+?\d{10,15}$"))
-            {
-                _recipientError = "Número inválido. Use o formato +5549999999999.";
-                return;
-            }
-        }
-
-        if (_settings.Recipients.Contains(value, StringComparer.OrdinalIgnoreCase))
-        {
-            _recipientError = "Destinatário já adicionado.";
-            return;
-        }
-
-        _settings.Recipients.Add(value);
-        _newRecipient = "";
-    }
-
-    private static string NormalizePhone(string value) =>
-        value.Replace(" ", "").Replace("-", "").Replace("(", "").Replace(")", "");
-
-    private void RemoveRecipient(string recipient) => _settings.Recipients.Remove(recipient);
 
     private async Task SaveAsync()
     {
