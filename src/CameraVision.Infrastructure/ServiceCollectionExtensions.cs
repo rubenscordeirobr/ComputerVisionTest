@@ -1,3 +1,4 @@
+using CameraVision.Core.Alerts;
 using CameraVision.Core.Repositories;
 using CameraVision.Infrastructure.Data;
 using CameraVision.Infrastructure.Repositories;
@@ -27,6 +28,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISystemAlertEventRepository, SystemAlertEventRepository>();
         services.AddSingleton<IWorkerStatusRepository, WorkerStatusRepository>();
         services.AddSingleton<IUserRepository, UserRepository>();
+        services.AddSingleton<IWhatsAppCommandRepository, WhatsAppCommandRepository>();
+        services.AddSingleton<TemporaryNoticeService>();
 
         return services;
     }

@@ -23,6 +23,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SystemAlertEvent> SystemAlertEvents => Set<SystemAlertEvent>();
     public DbSet<WorkerStatus> WorkerStatus => Set<WorkerStatus>();
     public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<WhatsAppCommandLog> WhatsAppCommandLogs => Set<WhatsAppCommandLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -167,6 +168,32 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.Property(s => s.Id).ValueGeneratedNever();
             e.Property(s => s.SmtpSecurity).HasConversion<string>().HasMaxLength(20);
+            e.Property(s => s.AiProvider).HasConversion<string>().HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<WhatsAppCommandLog>(e =>
+        {
+            e.Property(l => l.MessageId).HasMaxLength(100).IsRequired();
+            e.HasIndex(l => l.MessageId).IsUnique();
+            e.Property(l => l.SenderJid).HasMaxLength(100);
+            e.Property(l => l.SenderNumber).HasMaxLength(20);
+            e.Property(l => l.PushName).HasMaxLength(100);
+            e.Property(l => l.Text).HasMaxLength(1000);
+            e.Property(l => l.Status).HasConversion<string>().HasMaxLength(20);
+            e.Property(l => l.Detail).HasMaxLength(500);
+            e.Property(l => l.Intent).HasMaxLength(30);
+            e.Property(l => l.IntentSource).HasMaxLength(20);
+            e.Property(l => l.ReplyText).HasMaxLength(1000);
+            e.HasIndex(l => new { l.Status, l.ReceivedAt });
+            e.HasIndex(l => new { l.SenderNumber, l.ReceivedAt });
+            e.HasOne<Contact>()
+                .WithMany()
+                .HasForeignKey(l => l.ContactId)
+                .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(l => l.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<HealthAlertSettings>(e =>

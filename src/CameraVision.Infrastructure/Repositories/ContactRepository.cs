@@ -70,6 +70,17 @@ public class ContactRepository(IDbContextFactory<AppDbContext> factory) : IConta
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task<IReadOnlyList<Contact>> FindByWhatsAppNumberAsync(IReadOnlyCollection<string> candidates, CancellationToken ct = default)
+    {
+        if (candidates.Count == 0)
+            return [];
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.Contacts.AsNoTracking()
+            .Where(c => c.WhatsAppNumber != null && candidates.Contains(c.WhatsAppNumber))
+            .OrderBy(c => c.TenantId).ThenBy(c => c.Id)
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<string>> GetHealthRecipientsAsync(int tenantId, AlertChannel channel, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);

@@ -114,6 +114,77 @@ public sealed class EvolutionApiClient(
                 media = Convert.ToBase64String(image),
             }, TimeSpan.FromSeconds(30), ct);
 
+    public async Task<EvolutionSendResult> SetWebhookAsync(SystemSettings settings, string url, string secret,
+        CancellationToken ct = default)
+    {
+        if (Validate(settings) is { } configError)
+            return new EvolutionSendResult(false, configError);
+        if (!Uri.TryCreate(url?.Trim(), UriKind.Absolute, out var webhookUri) ||
+            webhookUri.Scheme is not ("http" or "https"))
+            return new EvolutionSendResult(false, "Informe uma URL válida para o webhook.");
+        if (string.IsNullOrWhiteSpace(secret))
+            return new EvolutionSendResult(false, "Gere o segredo do webhook antes de registrá-lo.");
+
+        try
+        {
+            using var client = CreateClient(settings);
+            var instance = Uri.EscapeDataString(settings.EvolutionInstanceName.Trim());
+            var response = await client.PostAsJsonAsync($"webhook/set/{instance}", new
+            {
+                webhook = new
+                {
+                    enabled = true,
+                    url = webhookUri.ToString(),
+                    webhookByEvents = false,
+                    webhookBase64 = false,
+                    headers = new Dictionary<string, string> { ["X-Webhook-Key"] = secret.Trim() },
+                    events = new[] { "MESSAGES_UPSERT" },
+                },
+            }, ct);
+            if (response.IsSuccessStatusCode)
+                return new EvolutionSendResult(true);
+
+            var detail = await ReadErrorDetailAsync(response, ct);
+            return new EvolutionSendResult(false,
+                $"A Evolution API retornou HTTP {(int)response.StatusCode}" +
+                (detail == null ? "." : $": {detail}"));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Evolution API webhook registration failed.");
+            return new EvolutionSendResult(false, $"Falha ao contatar a Evolution API: {ex.Message}");
+        }
+    }
+
+    public async Task<EvolutionWebhookState> GetWebhookAsync(SystemSettings settings, CancellationToken ct = default)
+    {
+        if (Validate(settings) is { } configError)
+            return new EvolutionWebhookState(false, null, configError);
+
+        try
+        {
+            using var client = CreateClient(settings);
+            var instance = Uri.EscapeDataString(settings.EvolutionInstanceName.Trim());
+            var response = await client.GetAsync($"webhook/find/{instance}", ct);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return new EvolutionWebhookState(false, null);
+            if (!response.IsSuccessStatusCode)
+                return new EvolutionWebhookState(false, null,
+                    $"A Evolution API retornou HTTP {(int)response.StatusCode}.");
+
+            var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            if (json.ValueKind != JsonValueKind.Object)
+                return new EvolutionWebhookState(false, null);
+            var enabled = json.TryGetProperty("enabled", out var flag) && flag.ValueKind == JsonValueKind.True;
+            return new EvolutionWebhookState(enabled, GetString(json, "url"));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Evolution API webhook lookup failed.");
+            return new EvolutionWebhookState(false, null, $"Falha ao contatar a Evolution API: {ex.Message}");
+        }
+    }
+
     private async Task<EvolutionSendResult> SendAsync<TPayload>(SystemSettings settings, string number,
         string endpoint, Func<string, TPayload> payload, TimeSpan timeout, CancellationToken ct)
     {
