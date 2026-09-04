@@ -138,6 +138,35 @@ public class CommandTextRulesTests
         Assert.Equal(CommandIntent.ListCaptures, result.Intent);
         Assert.Null(result.ObjectClass);
         Assert.Equal("dinossauros", result.UnknownClass);
+        Assert.True(result.Tentative);
+    }
+
+    [Theory]
+    [InlineData("últimas 5 capturas de pessoas de camisa amarela", "person", 5)]
+    [InlineData("mostra as capturas de carros na garagem", "car", null)]
+    [InlineData("quero ver as capturas de pessoas e cachorros", "person", null)]
+    public void Captures_with_unread_words_are_tentative(string text, string objectClass, int? count)
+    {
+        var result = CommandTextRules.TryMatch(text, Now);
+        Assert.NotNull(result);
+        Assert.Equal(CommandIntent.ListCaptures, result.Intent);
+        Assert.Equal(objectClass, result.ObjectClass);
+        Assert.Equal(count, result.Count);
+        Assert.True(result.Tentative);
+    }
+
+    [Theory]
+    [InlineData("últimas 5 capturas de pessoas")]
+    [InlineData("quero ver as capturas de gatos de hoje")]
+    [InlineData("mostra as duas últimas capturas de cães de hoje")]
+    [InlineData("últimas capturas")]
+    [InlineData("status")]
+    [InlineData("ativar alertas")]
+    public void Fully_read_messages_are_not_tentative(string text)
+    {
+        var result = CommandTextRules.TryMatch(text, Now);
+        Assert.NotNull(result);
+        Assert.False(result.Tentative);
     }
 
     [Fact]
@@ -150,4 +179,34 @@ public class CommandTextRulesTests
     [Fact]
     public void Fold_strips_accents_and_punctuation() =>
         Assert.Equal("ate as 22:30 nao", CommandTextRules.Fold("  Até às 22:30, NÃO!  "));
+
+    [Theory]
+    [InlineData("sim")]
+    [InlineData("Sim!")]
+    [InlineData("pode mandar")]
+    [InlineData("ok, quero")]
+    [InlineData("manda aí 👍")]
+    [InlineData("👍")]
+    [InlineData("por favor")]
+    public void Confirmation_yes(string text) =>
+        Assert.True(CommandTextRules.TryMatchConfirmation(text));
+
+    [Theory]
+    [InlineData("não")]
+    [InlineData("Não, obrigado")]
+    [InlineData("deixa pra lá")]
+    [InlineData("agora não")]
+    [InlineData("n")]
+    public void Confirmation_no(string text) =>
+        Assert.False(CommandTextRules.TryMatchConfirmation(text));
+
+    [Theory]
+    [InlineData("status")]
+    [InlineData("manda as capturas de carros")]
+    [InlineData("não quero mais alertas")]
+    [InlineData("sim, mas só as de hoje e as de ontem")]
+    [InlineData("bom dia")]
+    [InlineData("")]
+    public void Confirmation_undecided(string text) =>
+        Assert.Null(CommandTextRules.TryMatchConfirmation(text));
 }
