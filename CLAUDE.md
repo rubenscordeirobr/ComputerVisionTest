@@ -66,6 +66,12 @@ Solution `ComputerVisionTest.slnx` (central package management via
   and transcribed by `ISpeechToTextClient` → `WhisperSpeechToTextClient`
   (docker-compose `whisper` / `whisper-cpu`, port 9000, settings on
   `/system/ai`) before the same text pipeline; replies quote the transcript.
+  SPEC-20: a request the LLM understands but the agent cannot serve
+  (`CommandIntent.Unsupported`, parsed by `LlmAnswerParser` in Core) is stored
+  as an `AgentSuggestion` (SuperAdmin page `/system/suggestions`) and answered
+  with the closest supported command as an offer — the log row waits in
+  `AwaitingConfirmation` with the offer in `FollowUpJson`, and a "sim"
+  (`CommandTextRules.TryMatchConfirmation`) runs it.
   `WorkerHealthMonitor` tracks worker liveness (SPEC-15):
   stale worker reports (>35 s) show "Sem processamento"/banners, and worker
   down/recovery fires critical admin alerts (own e-mail/WhatsApp recipients in

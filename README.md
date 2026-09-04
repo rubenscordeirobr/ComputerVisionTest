@@ -280,6 +280,14 @@ line per camera (Online / Offline / Sem processamento…), and **"últimas 5
 capturas de pessoas"** (default 5, max 10; "de gatos", "de carros"… or no
 object) returns the latest captures with their watch links.
 
+With an AI provider configured, a request the model understands but the agent
+cannot serve (SPEC-20) — "últimas 5 capturas de pessoas de camisa amarela",
+"abre o portão" — is answered with "Entendi que você quer …, porém isso ainda
+não está implementado — anotei sua sugestão", stored for the SuperAdmin under
+**Sistema → Sugestões do agente**, and the closest supported command is
+offered ("Quer que eu envie as últimas 5 capturas de pessoa? Responda 'sim'"):
+"sim" runs it, "não" drops it.
+
 **Voice notes** (SPEC-19) work for every command: the audio is transcribed by
 the local Whisper server and the text reply starts with 🎤 *Entendi: "…"*.
 Setup:
