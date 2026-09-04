@@ -17,7 +17,7 @@ dotnet run --project src/CameraVision.DetectionWorker # detection worker (from r
 dotnet build ComputerVisionTest.slnx  # build everything (fails copying a running exe — build individual projects while apps run)
 ```
 
-Watch streams via `client/index.html` (plays directly from MediaMTX, never from the .NET app).
+Watch streams on the web app's "Ao vivo" page (`/live`, `/live/full` for a bare tab); the browser plays directly from MediaMTX (WebRTC/HLS), never through the .NET apps.
 
 ## Architecture
 
@@ -76,7 +76,13 @@ Solution `ComputerVisionTest.slnx` (central package management via
   "#RRGGBB" validated by `AnnotationColor` in Core, color inputs in
   `CaptureRuleDialog`); the worker draws only classes covered by a rule
   (`RecordingConfig.IsTracked`) using the rule color or its default palette
-  (`Annotator`, first rule wins per class).
+  (`Annotator`, first rule wins per class). SPEC-22: the **live camera wall**
+  (`/live`, nav "Ao vivo", dashboard button): the tenant's enabled cameras on
+  a CSS-grid template from the `LiveLayouts` catalog (Core, 1–6 cameras,
+  several templates per count), one `LiveTile` (WebRTC/HLS via
+  `live-player.js`) per slot; the selection (`LiveViewSelection`, Core) rides
+  in `?layout=…&cams=…`, is remembered in `localStorage`, and `/live/full`
+  (`FullscreenLayout`, no chrome) shows the same wall in a new tab.
   `WorkerHealthMonitor` tracks worker liveness (SPEC-15):
   stale worker reports (>35 s) show "Sem processamento"/banners, and worker
   down/recovery fires critical admin alerts (own e-mail/WhatsApp recipients in

@@ -39,7 +39,7 @@ dotnet run --project src/CameraVision.Web   # http://localhost:5210
 # 4. Run the detection worker (from the repository root)
 dotnet run --project src/CameraVision.DetectionWorker
 
-# 5. Watch: open client/index.html in a browser
+# 5. Watch: sign in to the web app and open "Ao vivo" (http://localhost:5210/live)
 ```
 
 The worker pulls cameras + capture rules from the API at startup, reports
@@ -210,19 +210,23 @@ When a track of a configured class reaches the recording confidence threshold:
 
 ## Viewing the streams
 
-- **Client page**: open `client/index.html` (double-click works in most browsers;
-  if yours blocks `file://` pages from fetching localhost, serve it instead:
-  `python -m http.server 8000 --directory client` → http://localhost:8000).
-  Camera names are read from the `DEFAULT_CAMERAS` list at the top of the file and
-  can be overridden with `?cams=a,b,c&host=192.168.3.2`.
+- **Web app — "Ao vivo"** (`/live`, sign-in required): the cameras of the
+  signed-in tenant on a grid. Choose how many cameras to show (1–6), pick one
+  of the layout templates for that count (equal grids, one highlighted camera
+  with the others beside/below it, two rows of different sizes…), and assign a
+  camera to each numbered position. The selection is kept in the URL
+  (`?layout=…&cams=…`) and remembered by the browser; "Abrir em nova aba" opens
+  the same wall without the app chrome (`/live/full`) for a second monitor, and
+  double-clicking a camera makes it fullscreen.
 - **Direct URLs** per camera `X`:
   - WebRTC page: `http://localhost:8889/annotated/X`
   - HLS: `http://localhost:8888/annotated/X/index.m3u8`
   - RTSP: `rtsp://localhost:8554/annotated/X` (e.g. `ffplay`, VLC)
 
 To watch from another device on the LAN, make sure `webrtcAdditionalHosts` in
-`mediamtx.yml` contains this machine's IP (currently `192.168.3.2`) and use
-`client/index.html?host=192.168.3.2` on that device.
+`mediamtx.yml` contains this machine's IP (currently `192.168.3.2`) and open
+the web app on that device by IP (`http://192.168.3.2:5210/live`): the player
+reaches MediaMTX on the same host name it was served from.
 
 ## MediaMTX
 
