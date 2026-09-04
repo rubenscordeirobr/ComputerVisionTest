@@ -1,4 +1,5 @@
 using CameraVision;
+using CameraVision.Annotation;
 using CameraVision.ApiClient;
 using CameraVision.Config;
 using CameraVision.Inference;
@@ -45,6 +46,8 @@ try
     config.Recording.Rules = rules.Rules.Select(r => new RecordingRule
     {
         Classes = new HashSet<string>(r.Classes, StringComparer.OrdinalIgnoreCase),
+        ClassColors = new Dictionary<string, string>(
+            r.ClassColors ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase),
         ConfidenceThreshold = (float)r.ConfidenceThreshold,
         ActiveFrom = r.ActiveFrom,
         ActiveTo = r.ActiveTo,
@@ -53,6 +56,11 @@ try
         .SelectMany(r => r.Classes)
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
+    // Annotation colors: the first enabled rule that sets a color for a class wins.
+    config.Recording.ClassColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var rule in config.Recording.Rules)
+        foreach (var (className, hex) in rule.ClassColors)
+            config.Recording.ClassColors.TryAdd(className, hex);
     if (rules.Rules.Count > 0)
         config.Recording.ConfidenceThreshold = (float)rules.Rules.Min(r => r.ConfidenceThreshold);
     else
@@ -138,7 +146,11 @@ if (unknownClasses.Count > 0)
 
 Log.Info("startup", $"Tracking classes: {string.Join(", ", config.Recording.TrackClasses)} " +
                     $"(record >= {config.Recording.ConfidenceThreshold:0.00}, " +
-                    $"segments of {config.Recording.MaxSegmentSeconds}s)");
+                    $"segments of {config.Recording.MaxSegmentSeconds}s); only these are annotated.");
+var annotator = new Annotator(config.Recording.ClassColors);
+if (annotator.CustomColors.Count > 0)
+    Log.Info("startup", "Annotation colors: " +
+                        string.Join(", ", annotator.CustomColors.Select(kv => $"{kv.Key}={kv.Value}")));
 Log.Info("startup", $"Publishing to: {config.MediaMtx.PublishUrlBase}/<camera_name>");
 
 using var cts = new CancellationTokenSource();
@@ -188,7 +200,7 @@ if (api != null)
 }
 
 var pipelines = enabledCameras
-    .Select(camera => new CameraPipeline(camera, config, engine, api).RunAsync(cts.Token))
+    .Select(camera => new CameraPipeline(camera, config, engine, annotator, api).RunAsync(cts.Token))
     .ToArray();
 
 Log.Info("startup", $"Started {pipelines.Length} camera pipeline(s). Press Ctrl+C to stop.");

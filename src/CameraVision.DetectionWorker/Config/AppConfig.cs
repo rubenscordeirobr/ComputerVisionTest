@@ -83,8 +83,22 @@ public sealed class RecordingConfig
     /// <summary>A track starts recording once its confidence reaches this value at least once.</summary>
     public float ConfidenceThreshold { get; set; } = 0.5f;
 
+    /// <summary>
+    /// Annotation color per class ("#RRGGBB", COCO name). Filled from the rules' colors
+    /// (first rule wins per class) or from the JSON fallback; missing classes use the
+    /// default palette.
+    /// </summary>
+    public Dictionary<string, string> ClassColors { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Rules fetched from the API (with optional time-of-day windows). Null = JSON fallback.</summary>
     public List<RecordingRule>? Rules { get; set; }
+
+    /// <summary>True when at least one rule covers <paramref name="className"/> (time windows ignored).
+    /// Only these classes are tracked and annotated (SPEC-21).</summary>
+    public bool IsTracked(string className) =>
+        Rules == null
+            ? TrackClasses.Contains(className, StringComparer.OrdinalIgnoreCase)
+            : Rules.Any(r => r.Classes.Contains(className));
 
     /// <summary>
     /// Threshold to record <paramref name="className"/> right now, or null when nothing
@@ -121,6 +135,7 @@ public sealed class RecordingConfig
 public sealed class RecordingRule
 {
     public required HashSet<string> Classes { get; init; }
+    public Dictionary<string, string> ClassColors { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public required float ConfidenceThreshold { get; init; }
     public TimeOnly? ActiveFrom { get; init; }
     public TimeOnly? ActiveTo { get; init; }

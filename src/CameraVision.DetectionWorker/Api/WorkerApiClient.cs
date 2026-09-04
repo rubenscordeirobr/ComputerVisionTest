@@ -15,7 +15,11 @@ public sealed class ApiConfig
 public sealed record ApiCamera(int Id, string Name, string StreamUrl, string? SubStreamUrl, string PreferredStream);
 
 public sealed record ApiWorkerRule(
-    List<string> Classes, double ConfidenceThreshold, TimeOnly? ActiveFrom, TimeOnly? ActiveTo);
+    List<string> Classes,
+    Dictionary<string, string>? ClassColors,
+    double ConfidenceThreshold,
+    TimeOnly? ActiveFrom,
+    TimeOnly? ActiveTo);
 
 public sealed record ApiCaptureRules(List<ApiWorkerRule> Rules, int MaxSegmentSeconds, double LingerSeconds);
 

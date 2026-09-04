@@ -23,7 +23,7 @@ namespace CameraVision;
 /// (with an annotated-frame thumbnail) so alerts fire immediately.
 /// </summary>
 public sealed class CameraPipeline(CameraInfo camera, AppConfig config, InferenceEngine engine,
-    WorkerApiClient? api = null)
+    Annotator annotator, WorkerApiClient? api = null)
 {
     private readonly string _name = camera.Name;
 
@@ -149,10 +149,14 @@ public sealed class CameraPipeline(CameraInfo camera, AppConfig config, Inferenc
             var now = DateTime.Now;
 
             using var image = Image.LoadPixelData<Rgb24>(buffer, width, height);
-            var detections = engine.Detect(image);
-            var matches = tracker.Update(detections.ToList(), now);
+            // Only classes covered by a capture rule are tracked and annotated (SPEC-21);
+            // everything else the model sees is ignored.
+            var detections = engine.Detect(image)
+                .Where(d => config.Recording.IsTracked(d.Name.Name))
+                .ToList();
+            var matches = tracker.Update(detections, now);
 
-            Annotator.Draw(image, matches);
+            annotator.Draw(image, matches);
             image.CopyPixelDataTo(buffer);
 
             // Publisher gone (e.g. MediaMTX restarted) → throw so the pipeline reconnects.

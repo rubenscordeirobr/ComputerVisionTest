@@ -8,8 +8,12 @@ using SixLabors.ImageSharp.Processing;
 
 namespace CameraVision.Annotation;
 
-/// <summary>Draws bounding box, class label, confidence and tracking ID on frames.</summary>
-public static class Annotator
+/// <summary>
+/// Draws bounding box, class label, confidence and tracking ID on frames. Box color is the
+/// user-configured color of the class ("#RRGGBB" from the capture rules) or, when none is
+/// set, a fixed palette entry chosen by model class id.
+/// </summary>
+public sealed class Annotator
 {
     private static readonly Color[] Palette =
     [
@@ -23,6 +27,40 @@ public static class Annotator
     ];
 
     private static readonly Font? Font = CreateFont();
+
+    private readonly Dictionary<int, Color> _cache = [];
+    private readonly Dictionary<string, string> _customHex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Color> _custom = new(StringComparer.OrdinalIgnoreCase);
+
+    public Annotator(IReadOnlyDictionary<string, string>? classColors = null)
+    {
+        foreach (var (className, hex) in classColors ?? new Dictionary<string, string>())
+        {
+            try
+            {
+                _custom[className] = Color.ParseHex(hex);
+                _customHex[className] = hex;
+            }
+            catch (Exception)
+            {
+                Log.Warn("annotation", $"Ignoring invalid color '{hex}' for class '{className}'.");
+            }
+        }
+    }
+
+    /// <summary>Classes with a user-defined color (hex as configured).</summary>
+    public IReadOnlyDictionary<string, string> CustomColors => _customHex;
+
+    public Color ColorFor(TrackedObject track)
+    {
+        if (_cache.TryGetValue(track.ClassId, out var color))
+            return color;
+        color = _custom.TryGetValue(track.ClassName, out var custom)
+            ? custom
+            : Palette[track.ClassId % Palette.Length];
+        _cache[track.ClassId] = color;
+        return color;
+    }
 
     private static Font? CreateFont()
     {
@@ -39,7 +77,7 @@ public static class Annotator
         }
     }
 
-    public static void Draw(Image<Rgb24> image, List<(Detection Detection, TrackedObject Track)> items)
+    public void Draw(Image<Rgb24> image, List<(Detection Detection, TrackedObject Track)> items)
     {
         if (items.Count == 0)
             return;
@@ -50,7 +88,7 @@ public static class Annotator
         {
             foreach (var (_, track) in items)
             {
-                var color = Palette[track.ClassId % Palette.Length];
+                var color = ColorFor(track);
                 var bounds = track.Bounds;
                 ctx.Draw(color, thickness, new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height));
 
