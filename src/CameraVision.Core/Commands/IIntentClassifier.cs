@@ -8,7 +8,7 @@ namespace CameraVision.Core.Commands;
 /// </summary>
 public interface IIntentClassifier
 {
-    /// <param name="expectingDuration">The agent's last reply to this sender was "até quando?".</param>
+    /// <param name="state">What the agent's last reply to this sender is waiting for ("até quando?", an offered command).</param>
     Task<CommandInterpretation> ClassifyAsync(string text, SystemSettings settings, DateTime now,
-        bool expectingDuration, CancellationToken ct = default);
+        ConversationState state, CancellationToken ct = default);
 }

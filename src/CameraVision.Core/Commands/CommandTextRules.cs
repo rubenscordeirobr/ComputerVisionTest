@@ -52,6 +52,18 @@ public static partial class CommandTextRules
     [GeneratedRegex(@"^(?:hoje|ontem|agora|recentes?|todas?|tudo)$")]
     private static partial Regex TimeWords();
 
+    // Answers to "Quer que eu …? Responda \"sim\"." — only consulted while an offer is pending (SPEC-20).
+    [GeneratedRegex(@"\bsim\b|\bs\b|\bok(?:ay)?\b|\bpode\b|\bclaro\b|\bquero\b|\bmand\w*|\benvi\w*|\bisso\b|\bbora\b|\bbeleza\b|\bblz\b|\bpositivo\b|\bcom\s+certeza\b|\bfavor\b|\bpfv?\b|\bta\b|\btudo\s+bem\b|\baceito\b|\byes\b|\bvai\b|\bfaz\b")]
+    private static partial Regex YesWords();
+
+    [GeneratedRegex(@"\bnao\b|\bn\b|\bdeixa\b|\bdepois\b|\bnegativo\b|\bdispens\w*|\bnem\b|\bcancel\w*")]
+    private static partial Regex NoWords();
+
+    private static readonly string[] YesEmojis = ["👍", "👌", "✅"];
+
+    // Words that may sit between the class and a qualifier without carrying meaning of their own.
+    private static readonly HashSet<string> Connectors = ["de", "da", "do", "das", "dos", "e", "com", "a", "o", "as", "os"];
+
     private static readonly Dictionary<string, int> WordNumbers = new()
     {
         ["uma"] = 1, ["um"] = 1, ["duas"] = 2, ["dois"] = 2, ["tres"] = 3, ["quatro"] = 4, ["cinco"] = 5,
@@ -111,6 +123,26 @@ public static partial class CommandTextRules
         return null;
     }
 
+    /// <summary>
+    /// Yes/no to the command the agent offered (SPEC-20): true = run it, false = drop it,
+    /// null = the message is something else and goes through the normal interpretation.
+    /// Only short messages count, a message that names alerts, status or captures is a
+    /// command in its own right, and a "não" wins over any yes word ("não, obrigado").
+    /// </summary>
+    public static bool? TryMatchConfirmation(string text)
+    {
+        var thumbsUp = YesEmojis.Any(text.Contains);
+        var folded = Fold(text);
+        if (folded.Length == 0)
+            return thumbsUp ? true : null;
+        if (folded.Split(' ').Length > ShortMessageWords ||
+            Nouns().IsMatch(folded) || StatusCues().IsMatch(folded) || CaptureNouns().IsMatch(folded))
+            return null;
+        if (NoWords().IsMatch(folded))
+            return false;
+        return YesWords().IsMatch(folded) || thumbsUp ? true : null;
+    }
+
     /// <summary>"últimas 3 capturas de pessoas" → ListCaptures, Count 3, person. Count is the raw number (clamped later).</summary>
     private static CommandInterpretation? TryMatchCaptures(string folded, int words)
     {
@@ -126,17 +158,26 @@ public static partial class CommandTextRules
 
         string? objectClass = null;
         string? unknownClass = null;
+        var tentative = false;
         var after = folded[(noun.Index + noun.Length)..];
         if (ClassPhrase().Match(after) is { Success: true } phrase)
         {
             var candidate = phrase.Groups[1].Value.Trim();
-            objectClass = DetectableClassResolver.TryResolve(candidate)
-                          ?? candidate.Split(' ').Select(DetectableClassResolver.TryResolve).FirstOrDefault(c => c != null);
+            var parts = candidate.Split(' ');
+            var matched = DetectableClassResolver.TryResolve(candidate) != null
+                ? candidate
+                : parts.FirstOrDefault(p => DetectableClassResolver.TryResolve(p) != null);
+            objectClass = matched == null ? null : DetectableClassResolver.TryResolve(matched);
             if (objectClass == null && candidate.Length > 0 && !TimeWords().IsMatch(candidate))
                 unknownClass = candidate;
+            // "pessoas de camisa amarela", "carros na garagem": a class plus words the rules
+            // cannot read (or no known class at all) — a model should look before the reply goes out.
+            tentative = unknownClass != null ||
+                        (matched != null && matched != candidate &&
+                         parts.Any(p => p != matched && !Connectors.Contains(p) && !TimeWords().IsMatch(p)));
         }
 
         return new CommandInterpretation(CommandIntent.ListCaptures, Count: count, ObjectClass: objectClass,
-            UnknownClass: unknownClass);
+            UnknownClass: unknownClass, Tentative: tentative);
     }
 }

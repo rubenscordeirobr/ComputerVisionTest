@@ -11,6 +11,9 @@ public enum WhatsAppCommandStatus
     Done = 2,
     Ignored = 3,
     Failed = 4,
+
+    /// <summary>Answered; the bot offered the closest supported command and waits for "sim"/"não" (SPEC-20).</summary>
+    AwaitingConfirmation = 5,
 }
 
 public enum WhatsAppMessageKind
@@ -68,4 +71,7 @@ public class WhatsAppCommandLog
     public int TriggersAffected { get; set; }
     public string? ReplyText { get; set; }
     public DateTime? ProcessedAt { get; set; }
+
+    /// <summary>The offered command (CommandInterpretation JSON) while Status is AwaitingConfirmation.</summary>
+    public string? FollowUpJson { get; set; }
 }
