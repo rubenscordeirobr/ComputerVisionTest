@@ -15,6 +15,13 @@ public class CaptureRule
     /// <summary>English COCO class names this rule records.</summary>
     public List<string> Classes { get; set; } = [];
 
+    /// <summary>
+    /// Optional annotation color per class ("#RRGGBB", keyed by COCO name). Classes
+    /// missing here are drawn with the worker's default palette. The worker only
+    /// annotates classes that appear in at least one enabled rule (SPEC-21).
+    /// </summary>
+    public Dictionary<string, string> ClassColors { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public double ConfidenceThreshold { get; set; } = 0.5;
     public int MaxSegmentSeconds { get; set; } = 60;
     public double LingerSeconds { get; set; } = 2.0;
@@ -41,6 +48,10 @@ public class CaptureRule
     public List<AlertTrigger> Triggers { get; set; } = [];
 
     public bool IsAlwaysActive => ActiveFrom == null || ActiveTo == null;
+
+    /// <summary>The configured color of <paramref name="className"/>, or null for the default.</summary>
+    public string? ColorFor(string className) =>
+        ClassColors.TryGetValue(className, out var hex) ? hex : null;
 
     public bool IsActiveAt(TimeOnly time)
     {
