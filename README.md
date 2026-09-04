@@ -172,16 +172,22 @@ arrives corrupted. If `subRtspUrl` is missing, the app warns and uses the main U
 | `camerasFile` | `./data/cameras.json` | Camera list |
 | `modelPath` | `./models/yolo26n.onnx` | ONNX model |
 | `inferenceDevice` | `auto` | `auto` \| `cuda` \| `cpu` |
-| `detection.confidenceThreshold` | `0.35` | Minimum confidence to draw a detection |
+| `detection.confidenceThreshold` | `0.35` | Minimum confidence for a detection to be tracked/drawn |
 | `detection.maxProcessingWidth` | `1280` | Downscale frames wider than this (0 = off) |
 | `mediamtx.publishUrlBase` | `rtsp://localhost:8554/annotated` | Streams publish to `{base}/{camera_name}` |
-| `recording.trackClasses` | `["person"]` | COCO classes that trigger recording |
+| `recording.trackClasses` | `["person"]` | COCO classes that trigger recording (only these are annotated) |
+| `recording.classColors` | `{}` | Annotation color per class (`"person": "#FF3838"`); others use the default palette |
 | `recording.confidenceThreshold` | `0.5` | Track records once it reaches this confidence |
 | `recording.maxSegmentSeconds` | `60` | Max clip length; longer tracks → consecutive clips |
 | `recording.outputRoot` | `./output` | Recording destination |
 | `recording.lostTrackTimeoutSeconds` | `2.0` | Unseen for this long ⇒ object left the frame |
 
 Relative paths are resolved against the folder containing `appsettings.json`.
+
+When the worker gets its rules from the API, `trackClasses` / `classColors` are
+replaced by the union of the enabled capture rules: only classes with a rule are
+tracked and drawn, in the color chosen for the class on the rule (first rule wins
+per class) or the default palette color when none is set.
 
 **Language**: user-facing text is PT-BR — the client UI and the labels drawn on
 frames (`src/CameraVision/Annotation/ClassLabels.cs` maps COCO names to PT-BR).

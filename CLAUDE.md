@@ -71,7 +71,12 @@ Solution `ComputerVisionTest.slnx` (central package management via
   as an `AgentSuggestion` (SuperAdmin page `/system/suggestions`) and answered
   with the closest supported command as an offer — the log row waits in
   `AwaitingConfirmation` with the offer in `FollowUpJson`, and a "sim"
-  (`CommandTextRules.TryMatchConfirmation`) runs it.
+  (`CommandTextRules.TryMatchConfirmation`) runs it. SPEC-21: each capture rule
+  carries optional annotation colors per class (`CaptureRule.ClassColors`,
+  "#RRGGBB" validated by `AnnotationColor` in Core, color inputs in
+  `CaptureRuleDialog`); the worker draws only classes covered by a rule
+  (`RecordingConfig.IsTracked`) using the rule color or its default palette
+  (`Annotator`, first rule wins per class).
   `WorkerHealthMonitor` tracks worker liveness (SPEC-15):
   stale worker reports (>35 s) show "Sem processamento"/banners, and worker
   down/recovery fires critical admin alerts (own e-mail/WhatsApp recipients in
