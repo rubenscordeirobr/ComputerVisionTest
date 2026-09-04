@@ -69,7 +69,12 @@
             <MudTd DataLabel="Classes">
                 @foreach (var className in context.Classes)
                 {
+                    var hex = context.ColorFor(className);
                     <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">
+                        @if (hex != null)
+                        {
+                            <span title="@hex" style="display:inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: @hex; border: 1px solid rgba(0,0,0,.25);"></span>
+                        }
                         @DetectableClasses.Translate(className)
                     </MudChip>
                 }

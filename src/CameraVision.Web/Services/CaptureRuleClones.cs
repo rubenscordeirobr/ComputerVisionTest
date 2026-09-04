@@ -28,6 +28,7 @@ public static class CaptureRuleClones
         Name = rule.Name,
         Enabled = rule.Enabled,
         Classes = [.. rule.Classes],
+        ClassColors = new Dictionary<string, string>(rule.ClassColors, StringComparer.OrdinalIgnoreCase),
         ConfidenceThreshold = rule.ConfidenceThreshold,
         MaxSegmentSeconds = rule.MaxSegmentSeconds,
         LingerSeconds = rule.LingerSeconds,

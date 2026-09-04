@@ -30,6 +30,39 @@
                 }
             </MudSelect>
 
+            @if (_selectedClasses.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-4">Cores na imagem</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Cor da caixa e do rótulo desenhados no vídeo para cada classe. Sem cor definida,
+                    o processador usa a cor padrão da classe. Apenas classes com regra são marcadas
+                    na imagem.
+                </MudText>
+                <div class="d-flex flex-wrap gap-3 mt-2">
+                    @foreach (var className in _selectedClasses.OrderBy(DetectableClasses.Translate))
+                    {
+                        var hasColor = Rule.ClassColors.ContainsKey(className);
+                        <div class="d-flex align-center gap-2" style="min-width: 220px;">
+                            <input type="color" value="@(Rule.ClassColors.GetValueOrDefault(className, DefaultPickerColor))"
+                                   @onchange="@(e => SetColor(className, e.Value?.ToString()))"
+                                   title="@($"Cor de {DetectableClasses.Translate(className)}")"
+                                   style="width: 40px; height: 32px; padding: 0; border: 1px solid var(--mud-palette-lines-inputs); border-radius: 4px; cursor: pointer;" />
+                            <div class="d-flex flex-column">
+                                <MudText Typo="Typo.body2">@DetectableClasses.Translate(className)</MudText>
+                                @if (hasColor)
+                                {
+                                    <MudLink Typo="Typo.caption" OnClick="@(() => ClearColor(className))">Usar padrão</MudLink>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Cor padrão</MudText>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
             <MudNumericField T="int" @bind-Value="Rule.MaxSegmentSeconds" Class="mt-3"
                              Label="Duração máxima do segmento (s)" Min="5" Max="3600" />
             <MudNumericField T="double" @bind-Value="Rule.LingerSeconds" Class="mt-3"
@@ -189,6 +222,17 @@
     private string ClassesSummary(IReadOnlyList<string> selected) =>
         selected.Count == 0 ? "" : string.Join(", ", selected.Select(DetectableClasses.Translate));
 
+    /// <summary>Shown in the picker while the class still uses the worker's default color.</summary>
+    private const string DefaultPickerColor = "#FF3838";
+
+    private void SetColor(string className, string? value)
+    {
+        if (AnnotationColor.TryNormalize(value, out var hex))
+            Rule.ClassColors[className] = hex;
+    }
+
+    private void ClearColor(string className) => Rule.ClassColors.Remove(className);
+
     private async Task AddTriggerAsync()
     {
         if (Rule.TenantId == 0)
@@ -271,6 +315,9 @@
 
         Rule.Name = Rule.Name.Trim();
         Rule.Classes = _selectedClasses.ToList();
+        Rule.ClassColors = AnnotationColor.Sanitize(Rule.ClassColors
+            .Where(kv => Rule.Classes.Contains(kv.Key, StringComparer.OrdinalIgnoreCase))
+            .Select(kv => new KeyValuePair<string, string?>(kv.Key, kv.Value)));
         foreach (var trigger in Rule.Triggers)
             trigger.CaptureRuleId = Rule.Id;
 
