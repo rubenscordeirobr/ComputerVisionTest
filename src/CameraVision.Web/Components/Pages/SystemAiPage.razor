@@ -16,7 +16,9 @@
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
         Modelo usado pelo agente de comandos do WhatsApp para entender mensagens que as regras
         de palavras-chave não reconhecem. Sem provedor, só as frases simples ("ativar alertas",
-        "desativar alertas") são atendidas.
+        "desativar alertas") são atendidas. Com provedor, um pedido entendido mas ainda não
+        atendido vira uma sugestão em <MudLink Href="/system/suggestions">Sugestões do agente</MudLink>,
+        e o agente oferece o comando mais próximo que consegue executar.
     </MudText>
     <MudGrid Spacing="2">
         <MudItem xs="12" sm="4">
@@ -68,7 +70,7 @@
     </div>
     @if (_testResult != null)
     {
-        <MudAlert Severity="@(_testResult.Intent == CommandIntent.Unknown ? Severity.Warning : Severity.Success)" Class="mt-3">
+        <MudAlert Severity="@AlertSeverity(_testResult.Intent)" Class="mt-3">
             <b>@CommandReplyText.IntentLabel(_testResult.Intent)</b>
             · origem: @CommandReplyText.SourceLabel(_testResult.Source)
             @if (_testResult.UntilDisabled)
@@ -90,6 +92,14 @@
             else if (_testResult.UnknownClass is { } unknownClass)
             {
                 <span> · objeto não reconhecido: @unknownClass</span>
+            }
+            @if (_testResult.Request is { } request)
+            {
+                <span> · pedido: "@request"</span>
+            }
+            @if (CommandReplyText.Offer(_testResult.Fallback) is { } offer)
+            {
+                <span> · alternativa oferecida: @offer</span>
             }
         </MudAlert>
     }
@@ -243,11 +253,18 @@
         try
         {
             var saved = await SettingsRepo.GetSystemSettingsAsync();
-            _testResult = await Classifier.ClassifyAsync(_testText, saved, DateTime.Now, expectingDuration: false);
+            _testResult = await Classifier.ClassifyAsync(_testText, saved, DateTime.Now, ConversationState.None);
         }
         finally
         {
             _testing = false;
         }
     }
+
+    private static Severity AlertSeverity(CommandIntent intent) => intent switch
+    {
+        CommandIntent.Unknown => Severity.Warning,
+        CommandIntent.Unsupported => Severity.Info,
+        _ => Severity.Success,
+    };
 }

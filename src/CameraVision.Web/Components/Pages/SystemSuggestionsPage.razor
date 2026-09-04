@@ -1,0 +1,107 @@
+@page "/system/suggestions"
+@attribute [Authorize(Policy = "SuperAdmin")]
+@inject IAgentSuggestionRepository SuggestionRepo
+@inject ITenantRepository TenantRepo
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Sistema · Sugestões do agente — CameraVision</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Sugestões do agente</MudText>
+
+<MudPaper Class="pa-6 mb-4" Style="max-width: 1100px;">
+    <div class="d-flex align-center gap-3 mb-2">
+        <MudText Typo="Typo.subtitle1">Pedidos entendidos, mas ainda não atendidos</MudText>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                 Color="@(_newCount > 0 ? Color.Warning : Color.Default)">@_newCount nova(s)</MudChip>
+        <MudSpacer />
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadAsync" aria-label="Atualizar" />
+    </div>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        Quando o modelo de IA entende o que um contato pediu pelo WhatsApp mas o agente não tem
+        essa função, o pedido é registrado aqui e o contato recebe "ainda não está implementado —
+        anotei sua sugestão", com o comando mais próximo oferecido como alternativa.
+    </MudText>
+    <MudTable Items="_suggestions" Dense="true" Hover="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Quando</MudTh>
+            <MudTh>Cliente</MudTh>
+            <MudTh>Remetente</MudTh>
+            <MudTh>Mensagem</MudTh>
+            <MudTh>Pedido entendido</MudTh>
+            <MudTh>Modelo</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Quando" Style="white-space: nowrap;">@context.CreatedAt.ToString("dd/MM HH:mm")</MudTd>
+            <MudTd DataLabel="Cliente">@TenantName(context.TenantId)</MudTd>
+            <MudTd DataLabel="Remetente" Style="white-space: nowrap;">
+                @(context.PushName ?? context.SenderNumber)
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.SenderNumber</MudText>
+            </MudTd>
+            <MudTd DataLabel="Mensagem">@context.MessageText</MudTd>
+            <MudTd DataLabel="Pedido entendido"><b>@context.Request</b></MudTd>
+            <MudTd DataLabel="Modelo">@(context.Model ?? "—")</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                         Color="@(context.ReviewedAt == null ? Color.Warning : Color.Default)">
+                    @(context.ReviewedAt is { } reviewed ? $"Vista em {reviewed:dd/MM HH:mm}" : "Nova")
+                </MudChip>
+            </MudTd>
+            <MudTd Style="white-space: nowrap;">
+                @if (context.ReviewedAt == null)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary"
+                                   title="Marcar como vista" aria-label="Marcar como vista"
+                                   OnClick="@(() => MarkReviewedAsync(context))" />
+                }
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               title="Excluir" aria-label="Excluir"
+                               OnClick="@(() => DeleteAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="mud-text-secondary">Nenhuma sugestão registrada ainda.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private IReadOnlyList<AgentSuggestion> _suggestions = [];
+    private Dictionary<int, string> _tenants = new();
+    private int _newCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tenants = (await TenantRepo.GetAllAsync()).ToDictionary(t => t.Id, t => t.Name);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _suggestions = await SuggestionRepo.GetRecentAsync(100);
+        _newCount = await SuggestionRepo.CountNewAsync();
+    }
+
+    private string TenantName(int tenantId) => _tenants.TryGetValue(tenantId, out var name) ? name : $"#{tenantId}";
+
+    private async Task MarkReviewedAsync(AgentSuggestion suggestion)
+    {
+        await SuggestionRepo.MarkReviewedAsync(suggestion.Id);
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(AgentSuggestion suggestion)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Excluir sugestão",
+            $"Excluir a sugestão \"{suggestion.Request}\"?",
+            yesText: "Excluir", cancelText: "Cancelar");
+        if (confirmed != true)
+            return;
+        await SuggestionRepo.DeleteAsync(suggestion.Id);
+        Snackbar.Add("Sugestão excluída.", Severity.Success);
+        await LoadAsync();
+    }
+}

@@ -1,3 +1,4 @@
+using CameraVision.Core;
 using CameraVision.Core.Commands;
 
 namespace CameraVision.Web.Services;
@@ -6,6 +7,11 @@ namespace CameraVision.Web.Services;
 public static class CommandReplyText
 {
     public const string AskUntilWhen = "Até quando? (ex.: \"2 horas\", \"até as 22h\", \"até amanhã\", \"até eu desativar\")";
+
+    private const string HelpLines =
+        "• \"ativar alertas\" / \"desativar alertas\" — receber as capturas no WhatsApp\n" +
+        "• \"status\" — situação das câmeras e do processador\n" +
+        "• \"últimas 5 capturas de pessoas\" — lista com links dos vídeos";
 
     public static string Enabled(int rules, int extended, DateTime? expiresAt, bool askUntilWhen)
     {
@@ -34,11 +40,34 @@ public static class CommandReplyText
             ? $"Alertas temporários encerrados em {rules} regra(s)."
             : "Não havia alertas temporários ativos para o seu número.";
 
-    public static string Unknown() =>
-        "Não entendi. Comandos que eu atendo:\n" +
-        "• \"ativar alertas\" / \"desativar alertas\" — receber as capturas no WhatsApp\n" +
-        "• \"status\" — situação das câmeras e do processador\n" +
-        "• \"últimas 5 capturas de pessoas\" — lista com links dos vídeos";
+    public static string Unknown() => "Não entendi. Comandos que eu atendo:\n" + HelpLines;
+
+    /// <summary>
+    /// Understood but not implemented (SPEC-20). With an offer the sender is asked to
+    /// confirm the closest supported command; without one the help lines follow.
+    /// </summary>
+    public static string Unsupported(string request, string? offer) =>
+        offer != null
+            ? $"Entendi que você quer {request}. Ainda não tenho essa função, mas seria ótimo — " +
+              $"anotei sua sugestão para a equipe! 📝\n\nQuer que eu {offer}? Responda \"sim\"."
+            : $"Entendi que você quer {request}, porém isso ainda não está implementado. " +
+              "Anotei sua sugestão para a equipe! 📝\n\nPor enquanto eu atendo:\n" + HelpLines;
+
+    /// <summary>The offered command as the verb phrase of "Quer que eu …?"; null when there is nothing to offer.</summary>
+    public static string? Offer(CommandInterpretation? fallback) => fallback switch
+    {
+        { Intent: CommandIntent.ListCaptures } list =>
+            "envie as últimas " +
+            (list.Count is { } count ? $"{Math.Clamp(count, 1, CommandInterpretation.MaxCount)} " : "") +
+            "capturas" +
+            (list.ObjectClass is { } objectClass ? $" de {DetectableClasses.Translate(objectClass)}" : ""),
+        { Intent: CommandIntent.CameraStatus } => "informe o status das câmeras",
+        { Intent: CommandIntent.EnableAlerts } => "ative os alertas no seu WhatsApp",
+        { Intent: CommandIntent.DisableAlerts } => "desative os alertas",
+        _ => null,
+    };
+
+    public static string Declined() => "Tudo bem! Se precisar, é só chamar. 👋";
 
     /// <summary>Prefix of every reply to a voice note, so the sender can spot a bad transcription.</summary>
     public static string Heard(string transcript) => $"🎤 Entendi: \"{transcript}\"\n\n";
@@ -63,6 +92,9 @@ public static class CommandReplyText
         CommandIntent.SetDuration => "Definir prazo",
         CommandIntent.CameraStatus => "Status das câmeras",
         CommandIntent.ListCaptures => "Últimas capturas",
+        CommandIntent.Unsupported => "Não implementado",
+        CommandIntent.Confirm => "Confirmação",
+        CommandIntent.Decline => "Recusa",
         _ => "Não entendido",
     };
 
@@ -73,6 +105,7 @@ public static class CommandReplyText
     {
         "rules" => "Regras",
         "llm" => "IA",
+        "offer" => "Oferta aceita",
         "error" => "Erro na IA",
         _ => "—",
     };

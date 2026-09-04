@@ -21,10 +21,13 @@ namespace CameraVision.Web.Services;
 /// capturas" (SPEC-18) are read-only reports composed from the health services and the
 /// capture repository. Voice notes (SPEC-19) are transcribed first through
 /// <see cref="ISpeechToTextClient"/> and then handled exactly like text, with the
-/// transcript quoted at the top of the reply.
+/// transcript quoted at the top of the reply. A request the model understands but the
+/// agent cannot serve (SPEC-20) is stored as an <see cref="AgentSuggestion"/> and answered
+/// with the closest supported command as an offer, which runs when the sender says "sim".
 /// </summary>
 public sealed class WhatsAppCommandHostedService(
     IWhatsAppCommandRepository commands,
+    IAgentSuggestionRepository suggestions,
     IContactRepository contacts,
     ISettingsRepository settingsRepository,
     IIntentClassifier classifier,
@@ -136,20 +139,65 @@ public sealed class WhatsAppCommandHostedService(
                 return; // the row already carries the outcome and the sender was answered
         }
 
-        var last = await commands.GetLastProcessedBySenderAsync(row.SenderNumber, ct);
-        var expectingDuration = last is { Status: WhatsAppCommandStatus.AwaitingDuration, ProcessedAt: { } at } &&
-                                now - at <= FollowUpWindow;
-
-        var interpretation = await classifier.ClassifyAsync(row.Text, settings, now, expectingDuration, ct);
+        var state = await StateAsync(row.SenderNumber, now, ct);
+        var interpretation = await classifier.ClassifyAsync(row.Text, settings, now, state, ct);
+        if (interpretation.Intent == CommandIntent.Confirm)
+        {
+            // "sim" runs the command offered in the previous reply (SPEC-20); without one
+            // there is nothing to confirm.
+            interpretation = state.PendingOffer is { } offer
+                ? offer with { Source = "offer" }
+                : CommandInterpretation.Unknown(interpretation.Source);
+        }
         row.Intent = interpretation.Intent.ToString();
         row.IntentSource = interpretation.Source;
 
+        var (reply, status) = await ExecuteAsync(interpretation, row, matches, settings, now, state, ct);
+
+        if ((interpretation.Intent is CommandIntent.EnableAlerts or CommandIntent.SetDuration) &&
+            !(await settingsRepository.GetAlertSettingsAsync(matches[0].TenantId, AlertChannel.WhatsApp, ct)).Enabled)
+            reply += $"\n\n{CommandReplyText.ChannelOffNote}";
+
+        if (heard != null)
+            reply = CommandReplyText.Heard(heard) + reply;
+        if (await ReplyAsync(row, settings, reply, status, ct))
+            logger.LogInformation("WhatsApp command {Id} from {Sender}: {Intent} ({Source}), {Rules} rule(s).",
+                row.Id, row.SenderNumber, row.Intent, row.IntentSource, row.TriggersAffected);
+    }
+
+    /// <summary>
+    /// The sender's last answered row, within the follow-up window, says what a short
+    /// reply means: a validity after "até quando?", or a yes/no to the offered command.
+    /// </summary>
+    private async Task<ConversationState> StateAsync(string senderNumber, DateTime now, CancellationToken ct)
+    {
+        var last = await commands.GetLastProcessedBySenderAsync(senderNumber, ct);
+        if (last is not { ProcessedAt: { } at } || now - at > FollowUpWindow)
+            return ConversationState.None;
+        return last.Status switch
+        {
+            WhatsAppCommandStatus.AwaitingDuration => new ConversationState(ExpectingDuration: true),
+            WhatsAppCommandStatus.AwaitingConfirmation =>
+                new ConversationState(PendingOffer: CommandInterpretation.TryFromJson(last.FollowUpJson)),
+            _ => ConversationState.None,
+        };
+    }
+
+    /// <summary>
+    /// Runs the interpreted command for every contact the number matched and composes the
+    /// reply; the row keeps the outcome (TriggersAffected, Detail, a pending offer). Shared
+    /// by the direct path and by a confirmed offer.
+    /// </summary>
+    private async Task<(string Reply, WhatsAppCommandStatus Status)> ExecuteAsync(
+        CommandInterpretation interpretation, WhatsAppCommandLog row, IReadOnlyList<Contact> matches,
+        SystemSettings settings, DateTime now, ConversationState state, CancellationToken ct)
+    {
         var status = WhatsAppCommandStatus.Done;
         string reply;
         switch (interpretation.Intent)
         {
             case CommandIntent.EnableAlerts:
-            case CommandIntent.SetDuration when !expectingDuration:
+            case CommandIntent.SetDuration when !state.ExpectingDuration:
             {
                 var askUntilWhen = !interpretation.HasDuration;
                 var expiresAt = askUntilWhen
@@ -261,24 +309,51 @@ public sealed class WhatsAppCommandHostedService(
                 row.Detail = $"{latest.Count} captura(s)";
                 break;
             }
+            case CommandIntent.Unsupported:
+            {
+                // Understood but not a capability: keep it for the SuperAdmin and, when the
+                // model found a close enough command, offer it and wait for "sim" (SPEC-20).
+                await suggestions.AddAsync(new AgentSuggestion
+                {
+                    TenantId = matches[0].TenantId,
+                    ContactId = matches[0].Id,
+                    CommandLogId = row.Id,
+                    SenderNumber = row.SenderNumber,
+                    PushName = row.PushName,
+                    MessageText = row.Text,
+                    Request = interpretation.Request ?? "",
+                    Model = string.IsNullOrWhiteSpace(settings.AiModel) ? null : settings.AiModel.Trim(),
+                    CreatedAt = now,
+                }, ct);
+                var offer = CommandReplyText.Offer(interpretation.Fallback);
+                if (offer != null)
+                {
+                    row.FollowUpJson = interpretation.Fallback!.ToJson();
+                    status = WhatsAppCommandStatus.AwaitingConfirmation;
+                }
+                row.Detail = offer == null ? "Sugestão registrada" : "Sugestão registrada · alternativa oferecida";
+                reply = CommandReplyText.Unsupported(interpretation.Request ?? "", offer);
+                break;
+            }
+            case CommandIntent.Decline:
+                row.Detail = "Oferta recusada";
+                reply = CommandReplyText.Declined();
+                break;
             default:
                 reply = CommandReplyText.Unknown();
-                // Keep waiting for the validity when the sender said something unrelated.
-                if (expectingDuration)
+                // Keep waiting for the validity or the yes/no when the sender said something unrelated.
+                if (state.ExpectingDuration)
+                {
                     status = WhatsAppCommandStatus.AwaitingDuration;
+                }
+                else if (state.PendingOffer is { } pending)
+                {
+                    row.FollowUpJson = pending.ToJson();
+                    status = WhatsAppCommandStatus.AwaitingConfirmation;
+                }
                 break;
         }
-
-        if (interpretation.Intent != CommandIntent.DisableAlerts && interpretation.Intent != CommandIntent.Unknown &&
-            !interpretation.IsReadOnly &&
-            !(await settingsRepository.GetAlertSettingsAsync(matches[0].TenantId, AlertChannel.WhatsApp, ct)).Enabled)
-            reply += $"\n\n{CommandReplyText.ChannelOffNote}";
-
-        if (heard != null)
-            reply = CommandReplyText.Heard(heard) + reply;
-        if (await ReplyAsync(row, settings, reply, status, ct))
-            logger.LogInformation("WhatsApp command {Id} from {Sender}: {Intent} ({Source}), {Rules} rule(s).",
-                row.Id, row.SenderNumber, row.Intent, row.IntentSource, row.TriggersAffected);
+        return (reply, status);
     }
 
     /// <summary>Sends the reply and marks the row; false when Evolution refused (the command itself already ran).</summary>

@@ -101,6 +101,8 @@
         pareado: o agente cria ou encerra um aviso temporário no próprio número do remetente e
         responde. A Evolution API entrega as mensagens recebidas no webhook abaixo (registrado na
         instância); o modelo de IA opcional fica em <MudLink Href="/system/ai">Inteligência artificial</MudLink>.
+        Pedidos que o agente entende mas ainda não atende ficam em
+        <MudLink Href="/system/suggestions">Sugestões do agente</MudLink>.
     </MudText>
     <MudGrid Spacing="2">
         <MudItem xs="12" sm="6">
@@ -287,6 +289,7 @@
     {
         WhatsAppCommandStatus.Pending => ("Na fila", Color.Default),
         WhatsAppCommandStatus.AwaitingDuration => ("Aguardando prazo", Color.Info),
+        WhatsAppCommandStatus.AwaitingConfirmation => ("Aguardando confirmação", Color.Info),
         WhatsAppCommandStatus.Done => ("Atendida", Color.Success),
         WhatsAppCommandStatus.Ignored => ("Ignorada", Color.Default),
         _ => ("Falhou", Color.Error),
