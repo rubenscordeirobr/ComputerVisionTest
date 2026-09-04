@@ -46,6 +46,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             v => v.Aggregate(0, (hash, i) => HashCode.Combine(hash, i)),
             v => v.ToList());
 
+        var stringMapConverter = new ValueConverter<Dictionary<string, string>, string>(
+            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+            v => new Dictionary<string, string>(
+                JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions?)null)
+                ?? new Dictionary<string, string>(),
+                StringComparer.OrdinalIgnoreCase));
+
+        var stringMapComparer = new ValueComparer<Dictionary<string, string>>(
+            (a, b) => (a ?? new Dictionary<string, string>()).OrderBy(kv => kv.Key)
+                .SequenceEqual((b ?? new Dictionary<string, string>()).OrderBy(kv => kv.Key)),
+            v => v.Aggregate(0, (hash, kv) => HashCode.Combine(hash, kv.Key.GetHashCode(), kv.Value.GetHashCode())),
+            v => new Dictionary<string, string>(v, StringComparer.OrdinalIgnoreCase));
+
         modelBuilder.Entity<Tenant>(e =>
         {
             e.Property(t => t.Name).HasMaxLength(100).IsRequired();
@@ -74,6 +87,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.Classes)
                 .HasConversion(stringListConverter)
                 .Metadata.SetValueComparer(stringListComparer);
+            e.Property(r => r.ClassColors)
+                .HasConversion(stringMapConverter)
+                .Metadata.SetValueComparer(stringMapComparer);
             e.HasIndex(r => r.TenantId);
             e.HasOne<Tenant>()
                 .WithMany()
