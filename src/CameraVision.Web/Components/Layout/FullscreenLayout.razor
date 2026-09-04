@@ -1,0 +1,14 @@
+@inherits LayoutComponentBase
+
+@* Chrome-free layout for the camera wall opened in its own tab (/live/full):
+   no app bar, no drawer, black stage filling the viewport. Still behind the
+   sign-in cookie like every other page. *@
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div class="live-full">
+    @Body
+</div>

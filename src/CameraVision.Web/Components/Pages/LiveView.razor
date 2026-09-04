@@ -1,0 +1,245 @@
+@page "/live"
+@using System.Globalization
+@using CameraVision.Core.Live
+@using CameraVision.Web.Components.Shared
+@using Microsoft.AspNetCore.WebUtilities
+@implements IAsyncDisposable
+@inject ICameraRepository CameraRepo
+@inject NavigationManager Nav
+@inject IJSRuntime Js
+
+@* Camera wall (SPEC-22): the signed-in user's cameras on a chosen grid layout.
+   The selection lives in the URL (?layout=…&cams=…) so it survives a refresh and
+   can be opened in a new tab; the last one is also remembered in this browser. *@
+
+<PageTitle>Ao vivo — CameraVision</PageTitle>
+
+<div class="d-flex align-center flex-wrap gap-2 mb-3">
+    <MudText Typo="Typo.h4">Ao vivo</MudText>
+    <MudSpacer />
+    @if (_cameras.Count > 0)
+    {
+        <MudButton Variant="Variant.Outlined" OnClick="@(() => _showOptions = !_showOptions)"
+                   StartIcon="@(_showOptions ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.Tune)">
+            @(_showOptions ? "Ocultar opções" : "Layout e câmeras")
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Fullscreen"
+                   OnClick="FullscreenAsync">
+            Tela cheia
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.OpenInNew"
+                   Href="@FullPageUrl" Target="_blank">
+            Abrir em nova aba
+        </MudButton>
+    }
+</div>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+}
+else if (_cameras.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Style="max-width: 640px;">
+        Nenhuma câmera ativa com stream configurado.
+        <MudLink Href="/cameras">Cadastrar câmeras</MudLink>
+    </MudAlert>
+}
+else
+{
+    @if (_showOptions)
+    {
+        <MudPaper Class="pa-4 mb-3">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudSelect T="int" Label="Câmeras na tela" Value="_view.Layout.CameraCount"
+                               ValueChanged="SetCountAsync" AnchorOrigin="Origin.BottomCenter">
+                        @for (var n = 1; n <= MaxCount; n++)
+                        {
+                            var count = n;
+                            <MudSelectItem T="int" Value="count">@count @(count == 1 ? "câmera" : "câmeras")</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @_cameras.Count @(_cameras.Count == 1 ? "câmera disponível" : "câmeras disponíveis")
+                        @(_cameras.Count > LiveLayouts.MaxCameras ? $" — até {LiveLayouts.MaxCameras} por tela" : "")
+                    </MudText>
+                </MudItem>
+                <MudItem xs="12" md="9">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Layout</MudText>
+                    <div class="live-layout-picker">
+                        @foreach (var template in LiveLayouts.For(_view.Layout.CameraCount))
+                        {
+                            <div class="live-layout-option @(template.Key == _view.Layout.Key ? "selected" : "")"
+                                 role="button" tabindex="0" title="@template.Name"
+                                 @onclick="@(() => SetLayoutAsync(template.Key))">
+                                <LiveLayoutThumb Layout="template" />
+                                <span>@template.Name</span>
+                            </div>
+                        }
+                    </div>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Câmeras por posição</MudText>
+                    <div class="live-slot-picker">
+                        @for (var i = 0; i < _view.SlotCameraIds.Count; i++)
+                        {
+                            var index = i;
+                            var current = _view.SlotCameraIds[index];
+                            <MudSelect T="int" Label="@($"Posição {index + 1}")" Value="current"
+                                       ValueChanged="@((int id) => SetCameraAsync(index, id))"
+                                       Dense="true" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                                @if (current == LiveViewSelection.EmptySlot)
+                                {
+                                    <MudSelectItem T="int" Value="LiveViewSelection.EmptySlot">— vazia —</MudSelectItem>
+                                }
+                                @foreach (var camera in _cameras)
+                                {
+                                    <MudSelectItem T="int" Value="camera.Id">@camera.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+                    </div>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    }
+
+    <div class="live-stage" style="@StageStyle" @ref="_stage">
+        <LiveGrid Layout="_view.Layout" Cameras="SlotCameras" />
+    </div>
+}
+
+@code {
+    private const string StorageKey = "cameravision.live";
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "layout")]
+    public string? LayoutKey { get; set; }
+
+    [SupplyParameterFromQuery(Name = "cams")]
+    public string? Cams { get; set; }
+
+    private IReadOnlyList<Camera> _cameras = [];
+    private Dictionary<int, Camera> _byId = [];
+    private IReadOnlyList<int> _availableIds = [];
+    private LiveViewResolved _view = LiveViewSelection.Empty.Resolve([]);
+    private bool _loading = true;
+    private bool _initialized;
+    private bool _showOptions = true;
+    private string? _appliedQuery;
+    private ElementReference _stage;
+    private IJSObjectReference? _module;
+
+    private int MaxCount => Math.Clamp(_cameras.Count, 1, LiveLayouts.MaxCameras);
+
+    private IReadOnlyList<Camera?> SlotCameras =>
+        _view.SlotCameraIds.Select(id => _byId.GetValueOrDefault(id)).ToList();
+
+    private string FullPageUrl => "/live/full?" + _view.ToSelection().ToQuery();
+
+    // Size the stage so every 16:9 cell fits without letterboxing: full width
+    // when the page is wide enough, otherwise bounded by the viewport height.
+    private string StageStyle
+    {
+        get
+        {
+            var (w, h) = _view.Layout.AspectRatio;
+            return string.Create(CultureInfo.InvariantCulture,
+                $"aspect-ratio: {w} / {h}; max-width: calc((100vh - 200px) * {w / h:0.####});");
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState;
+        var tenantFilter = auth.User.GetTenantFilter();
+        var cameras = await CameraRepo.GetAllAsync(tenantFilter);
+        _cameras = cameras
+            .Where(c => c.Enabled && !string.IsNullOrWhiteSpace(c.StreamUrl))
+            .OrderBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        _byId = _cameras.ToDictionary(c => c.Id);
+        _availableIds = _cameras.Select(c => c.Id).ToList();
+
+        var fromQuery = LiveViewSelection.Parse(LayoutKey, Cams);
+        _appliedQuery = fromQuery.ToQuery();
+        _view = fromQuery.Resolve(_availableIds);
+        _showOptions = !HasQuery;
+        _loading = false;
+        _initialized = true;
+    }
+
+    // A later navigation to /live?… (e.g. a bookmark) while the page is open.
+    protected override void OnParametersSet()
+    {
+        if (!_initialized)
+            return;
+        var fromQuery = LiveViewSelection.Parse(LayoutKey, Cams);
+        var key = fromQuery.ToQuery();
+        if (key == _appliedQuery)
+            return;
+        _appliedQuery = key;
+        if (HasQuery)
+            _view = fromQuery.Resolve(_availableIds);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        _module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/live-view.js");
+        if (HasQuery || _cameras.Count == 0)
+            return;
+
+        // No selection in the URL: restore the last one used in this browser.
+        var saved = await _module.InvokeAsync<string?>("load", StorageKey);
+        if (string.IsNullOrEmpty(saved))
+            return;
+        var query = QueryHelpers.ParseQuery(saved);
+        var selection = LiveViewSelection.Parse(
+            query.GetValueOrDefault("layout").ToString(), query.GetValueOrDefault("cams").ToString());
+        _view = selection.Resolve(_availableIds);
+        _showOptions = false;
+        StateHasChanged();
+    }
+
+    private bool HasQuery => LayoutKey != null || Cams != null;
+
+    private Task SetCountAsync(int count) => ApplyAsync(_view.WithCount(count));
+
+    private Task SetLayoutAsync(string layoutKey) => ApplyAsync(_view.WithLayout(layoutKey));
+
+    private Task SetCameraAsync(int slotIndex, int cameraId) =>
+        cameraId == LiveViewSelection.EmptySlot ? Task.CompletedTask : ApplyAsync(_view.WithCamera(slotIndex, cameraId));
+
+    private async Task ApplyAsync(LiveViewSelection selection)
+    {
+        _view = selection.Resolve(_availableIds);
+        var query = _view.ToSelection().ToQuery();
+        _appliedQuery = query;
+        if (_module != null)
+            await _module.InvokeVoidAsync("save", StorageKey, query);
+        Nav.NavigateTo("/live?" + query, new NavigationOptions { ReplaceHistoryEntry = true });
+    }
+
+    private async Task FullscreenAsync()
+    {
+        if (_module != null)
+            await _module.InvokeVoidAsync("toggleFullscreen", _stage);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module != null)
+                await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

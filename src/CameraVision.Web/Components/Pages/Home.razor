@@ -34,7 +34,13 @@
                 </div>
             </MudCardContent>
             <MudCardActions>
-                <MudButton Href="/cameras" Color="Color.Primary">Gerenciar câmeras</MudButton>
+                <MudButton Href="/live" Color="Color.Primary" StartIcon="@Icons.Material.Filled.LiveTv">Ver ao vivo</MudButton>
+                <MudTooltip Text="Abrir ao vivo em nova aba">
+                    <MudIconButton Href="/live/full" Target="_blank" Color="Color.Primary" Size="Size.Small"
+                                   Icon="@Icons.Material.Filled.OpenInNew" aria-label="Abrir ao vivo em nova aba" />
+                </MudTooltip>
+                <MudSpacer />
+                <MudButton Href="/cameras" Color="Color.Primary">Gerenciar</MudButton>
             </MudCardActions>
         </MudCard>
     </MudItem>

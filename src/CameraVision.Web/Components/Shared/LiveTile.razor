@@ -1,0 +1,107 @@
+@implements IAsyncDisposable
+@inject IJSRuntime Js
+
+@* One cell of the live grid: the annotated stream of a camera (WebRTC → HLS via
+   live-player.js) with a name/status badge. Double-click toggles fullscreen. *@
+
+<div class="live-tile" @ref="_root" @ondblclick="ToggleFullscreenAsync">
+    @if (Camera is null)
+    {
+        <div class="live-tile-empty">
+            <MudIcon Icon="@Icons.Material.Filled.VideocamOff" />
+            <span>Sem câmera</span>
+        </div>
+    }
+    else
+    {
+        <video @ref="_video" autoplay muted playsinline></video>
+        <div class="live-tile-label">
+            <span class="live-dot @_statusClass"></span>
+            <span class="live-tile-name">@Camera.Name</span>
+            <span class="live-tile-status">@_statusLabel</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Camera? Camera { get; set; }
+
+    private ElementReference _root;
+    private ElementReference _video;
+    private IJSObjectReference? _playerModule;
+    private IJSObjectReference? _viewModule;
+    private IJSObjectReference? _player;
+    private DotNetObjectReference<LiveTile>? _selfRef;
+    private int _playingCameraId;
+    private string _statusLabel = "Conectando…";
+    private string _statusClass = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _selfRef = DotNetObjectReference.Create(this);
+            _playerModule = await Js.InvokeAsync<IJSObjectReference>("import", "./js/live-player.js");
+            _viewModule = await Js.InvokeAsync<IJSObjectReference>("import", "./js/live-view.js");
+        }
+
+        var cameraId = Camera?.Id ?? 0;
+        if (cameraId == _playingCameraId || _playerModule == null)
+            return;
+
+        await StopPlayerAsync();
+        _playingCameraId = cameraId;
+        if (Camera == null)
+            return;
+
+        _statusLabel = "Conectando…";
+        _statusClass = "";
+        _player = await _playerModule.InvokeAsync<IJSObjectReference>(
+            "start", _video, _selfRef, $"annotated/{Camera.Name}", null, null);
+    }
+
+    [JSInvokable]
+    public void SetStatus(string kind)
+    {
+        (_statusLabel, _statusClass) = kind switch
+        {
+            "webrtc" => ("Ao vivo", "ok"),
+            "hls" => ("Ao vivo (HLS)", "ok"),
+            "offline" => ("Sem sinal", "err"),
+            _ => ("Conectando…", ""),
+        };
+        StateHasChanged();
+    }
+
+    private async Task ToggleFullscreenAsync()
+    {
+        if (_viewModule != null && Camera != null)
+            await _viewModule.InvokeVoidAsync("toggleFullscreen", _root);
+    }
+
+    private async Task StopPlayerAsync()
+    {
+        if (_player == null)
+            return;
+        await _player.InvokeVoidAsync("stop");
+        await _player.DisposeAsync();
+        _player = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _selfRef?.Dispose();
+        try
+        {
+            await StopPlayerAsync();
+            if (_playerModule != null)
+                await _playerModule.DisposeAsync();
+            if (_viewModule != null)
+                await _viewModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

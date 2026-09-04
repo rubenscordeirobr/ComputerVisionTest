@@ -1,0 +1,26 @@
+@using CameraVision.Core.Live
+
+@* The camera wall: one LiveTile per layout slot. Cells are keyed by camera so
+   moving a camera to another slot moves its <video> (the stream keeps playing)
+   instead of reconnecting. *@
+
+<div class="live-grid" style="@Layout.GridStyle">
+    @for (var i = 0; i < Layout.Slots.Count; i++)
+    {
+        var slot = Layout.Slots[i];
+        var camera = i < Cameras.Count ? Cameras[i] : null;
+        <div class="live-cell" style="@slot.GridArea"
+             @key="@(camera is null ? $"empty-{i}" : $"cam-{camera.Id}")">
+            <LiveTile Camera="camera" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public LiveLayout Layout { get; set; } = default!;
+
+    /// <summary>One entry per slot; null shows an empty cell.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<Camera?> Cameras { get; set; } = [];
+}

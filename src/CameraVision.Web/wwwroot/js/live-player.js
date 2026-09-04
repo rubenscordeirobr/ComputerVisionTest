@@ -1,5 +1,6 @@
 // Live playback of the annotated MediaMTX streams: WebRTC (WHEP) first for
-// sub-second latency, HLS as fallback. Mirrors client/index.html.
+// sub-second latency, HLS as fallback. Used by the live dialog on the cameras
+// page and by every tile of the live camera wall (SPEC-22).
 //
 // Base URLs default to the current origin: behind the Caddy HTTPS proxy the
 // streams are reachable at /webrtc/* and /hls/* on the same host; over plain

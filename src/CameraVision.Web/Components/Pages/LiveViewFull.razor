@@ -1,0 +1,85 @@
+@page "/live/full"
+@layout Layout.FullscreenLayout
+@using CameraVision.Core.Live
+@using CameraVision.Web.Components.Shared
+@using Microsoft.AspNetCore.WebUtilities
+@inject ICameraRepository CameraRepo
+@inject IJSRuntime Js
+
+@* The camera wall alone, for a dedicated browser tab or a second monitor.
+   Takes the same ?layout=…&cams=… query as /live; without it, the selection
+   last used in this browser (or every camera, up to the maximum) is shown. *@
+
+<PageTitle>Ao vivo — CameraVision</PageTitle>
+
+@if (_loading)
+{
+    <div class="live-full-message">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (_cameras.Count == 0)
+{
+    <div class="live-full-message">
+        <MudAlert Severity="Severity.Info">
+            Nenhuma câmera ativa com stream configurado.
+            <MudLink Href="/cameras">Cadastrar câmeras</MudLink>
+        </MudAlert>
+    </div>
+}
+else
+{
+    <LiveGrid Layout="_view.Layout" Cameras="SlotCameras" />
+}
+
+@code {
+    private const string StorageKey = "cameravision.live";
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "layout")]
+    public string? LayoutKey { get; set; }
+
+    [SupplyParameterFromQuery(Name = "cams")]
+    public string? Cams { get; set; }
+
+    private IReadOnlyList<Camera> _cameras = [];
+    private Dictionary<int, Camera> _byId = [];
+    private IReadOnlyList<int> _availableIds = [];
+    private LiveViewResolved _view = LiveViewSelection.Empty.Resolve([]);
+    private bool _loading = true;
+
+    private IReadOnlyList<Camera?> SlotCameras =>
+        _view.SlotCameraIds.Select(id => _byId.GetValueOrDefault(id)).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState;
+        var cameras = await CameraRepo.GetAllAsync(auth.User.GetTenantFilter());
+        _cameras = cameras
+            .Where(c => c.Enabled && !string.IsNullOrWhiteSpace(c.StreamUrl))
+            .OrderBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        _byId = _cameras.ToDictionary(c => c.Id);
+        _availableIds = _cameras.Select(c => c.Id).ToList();
+        _view = LiveViewSelection.Parse(LayoutKey, Cams).Resolve(_availableIds);
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || LayoutKey != null || Cams != null || _cameras.Count == 0)
+            return;
+
+        await using var module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/live-view.js");
+        var saved = await module.InvokeAsync<string?>("load", StorageKey);
+        if (string.IsNullOrEmpty(saved))
+            return;
+        var query = QueryHelpers.ParseQuery(saved);
+        _view = LiveViewSelection
+            .Parse(query.GetValueOrDefault("layout").ToString(), query.GetValueOrDefault("cams").ToString())
+            .Resolve(_availableIds);
+        StateHasChanged();
+    }
+}

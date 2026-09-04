@@ -1,0 +1,15 @@
+@using CameraVision.Core.Live
+
+@* Miniature of a layout template; each cell shows its slot number. *@
+
+<div class="live-thumb" style="@Layout.GridStyle">
+    @for (var i = 0; i < Layout.Slots.Count; i++)
+    {
+        <div class="live-thumb-cell" style="@Layout.Slots[i].GridArea">@(i + 1)</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public LiveLayout Layout { get; set; } = default!;
+}

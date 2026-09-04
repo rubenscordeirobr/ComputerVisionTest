@@ -111,3 +111,178 @@ h1:focus {
     margin-bottom: 1rem;
     font-size: .9rem;
 }
+
+/* Live view — camera wall (SPEC-22) */
+
+.live-stage {
+    width: 100%;
+    margin: 0 auto;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+    .live-stage:fullscreen {
+        width: 100vw;
+        height: 100vh;
+        max-width: none !important;
+        aspect-ratio: auto !important;
+        border-radius: 0;
+    }
+
+.live-full {
+    position: fixed;
+    inset: 0;
+    background: #000;
+}
+
+.live-full-message {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.live-grid {
+    display: grid;
+    gap: 4px;
+    width: 100%;
+    height: 100%;
+    background: #000;
+}
+
+.live-cell {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: #111;
+}
+
+.live-tile {
+    position: absolute;
+    inset: 0;
+    background: #000;
+}
+
+    .live-tile video {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background: #000;
+    }
+
+.live-tile-label {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, .55);
+    color: #fff;
+    font-size: .8rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.live-tile-status {
+    color: #bbb;
+}
+
+.live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #9e9e9e;
+    flex: none;
+}
+
+    .live-dot.ok {
+        background: #4caf50;
+    }
+
+    .live-dot.err {
+        background: #f44336;
+    }
+
+.live-tile-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    color: #757575;
+    font-size: .85rem;
+}
+
+/* Layout picker */
+
+.live-layout-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.live-layout-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 124px;
+    padding: 8px 4px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    font-size: .72rem;
+    line-height: 1.2;
+    color: var(--mud-palette-text-secondary);
+    user-select: none;
+}
+
+    .live-layout-option:hover,
+    .live-layout-option:focus-visible {
+        background: var(--mud-palette-action-default-hover);
+        outline: none;
+    }
+
+    .live-layout-option.selected {
+        border-color: var(--mud-palette-primary);
+        color: var(--mud-palette-primary);
+        font-weight: 500;
+    }
+
+.live-thumb {
+    display: grid;
+    gap: 2px;
+    width: 96px;
+    height: 54px;
+}
+
+.live-thumb-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 2px;
+    background: #90a4ae;
+    color: #fff;
+    font-size: .65rem;
+    font-weight: 500;
+}
+
+.live-layout-option.selected .live-thumb-cell {
+    background: var(--mud-palette-primary);
+}
+
+.live-slot-picker {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
