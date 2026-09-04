@@ -24,6 +24,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<WorkerStatus> WorkerStatus => Set<WorkerStatus>();
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<WhatsAppCommandLog> WhatsAppCommandLogs => Set<WhatsAppCommandLog>();
+    public DbSet<AgentSuggestion> AgentSuggestions => Set<AgentSuggestion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -187,6 +188,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(l => l.Intent).HasMaxLength(30);
             e.Property(l => l.IntentSource).HasMaxLength(20);
             e.Property(l => l.ReplyText).HasMaxLength(1000);
+            e.Property(l => l.FollowUpJson).HasMaxLength(500);
             e.HasIndex(l => new { l.Status, l.ReceivedAt });
             e.HasIndex(l => new { l.SenderNumber, l.ReceivedAt });
             e.HasOne<Contact>()
@@ -197,6 +199,29 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(l => l.TenantId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AgentSuggestion>(e =>
+        {
+            e.Property(s => s.SenderNumber).HasMaxLength(20);
+            e.Property(s => s.PushName).HasMaxLength(100);
+            e.Property(s => s.MessageText).HasMaxLength(1000);
+            e.Property(s => s.Request).HasMaxLength(200).IsRequired();
+            e.Property(s => s.Model).HasMaxLength(100);
+            e.HasIndex(s => new { s.ReviewedAt, s.CreatedAt });
+            e.HasIndex(s => s.TenantId);
+            e.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(s => s.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Contact>()
+                .WithMany()
+                .HasForeignKey(s => s.ContactId)
+                .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<WhatsAppCommandLog>()
+                .WithMany()
+                .HasForeignKey(s => s.CommandLogId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<HealthAlertSettings>(e =>

@@ -29,6 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IWorkerStatusRepository, WorkerStatusRepository>();
         services.AddSingleton<IUserRepository, UserRepository>();
         services.AddSingleton<IWhatsAppCommandRepository, WhatsAppCommandRepository>();
+        services.AddSingleton<IAgentSuggestionRepository, AgentSuggestionRepository>();
         services.AddSingleton<TemporaryNoticeService>();
 
         return services;
