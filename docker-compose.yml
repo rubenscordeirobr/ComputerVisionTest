@@ -28,7 +28,6 @@ services:
       - PORKBUN_API_SECRET=${PORKBUN_API_SECRET:-}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./client:/srv/client:ro    # served at view-camera.vemlogo.com
       - caddy_data:/data
       - caddy_config:/config
 

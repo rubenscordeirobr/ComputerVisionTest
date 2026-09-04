@@ -55,19 +55,11 @@ api-camera.vemlogo.com:8443 {
 	reverse_proxy host.docker.internal:5220
 }
 
-# Management web app (Blazor Server).
+# Management web app (Blazor Server). Live streams are watched from the
+# signed-in "Ao vivo" page (SPEC-22); there is no anonymous viewer site.
 web-camera.vemlogo.com:8443 {
 	import porkbun_tls
 	encode gzip
 	import mediamtx_streams
 	reverse_proxy host.docker.internal:5210
-}
-
-# Standalone stream viewer (client/index.html, mounted at /srv/client).
-view-camera.vemlogo.com:8443 {
-	import porkbun_tls
-	encode gzip
-	import mediamtx_streams
-	root * /srv/client
-	file_server
 }
