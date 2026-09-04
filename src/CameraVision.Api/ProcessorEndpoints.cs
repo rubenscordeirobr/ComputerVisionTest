@@ -35,7 +35,7 @@ public static class ProcessorEndpoints
             var enabled = await rules.GetEnabledAsync(ct: ct);
             var dto = new CaptureRulesDto(
                 enabled.Select(r => new WorkerRuleDto(
-                    r.Classes, r.ConfidenceThreshold, r.ActiveFrom, r.ActiveTo)).ToList(),
+                    r.Classes, r.ClassColors, r.ConfidenceThreshold, r.ActiveFrom, r.ActiveTo)).ToList(),
                 enabled.Count == 0 ? 60 : enabled.Max(r => r.MaxSegmentSeconds),
                 enabled.Count == 0 ? 2.0 : enabled.Max(r => r.LingerSeconds));
             return Results.Ok(dto);

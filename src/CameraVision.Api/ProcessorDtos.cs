@@ -3,8 +3,10 @@ namespace CameraVision.Api;
 public sealed record ProcessorCameraDto(
     int Id, string Name, string StreamUrl, string? SubStreamUrl, string PreferredStream);
 
+/// <param name="ClassColors">"#RRGGBB" per class (COCO name); classes absent use the worker's default palette.</param>
 public sealed record WorkerRuleDto(
     IReadOnlyList<string> Classes,
+    IReadOnlyDictionary<string, string> ClassColors,
     double ConfidenceThreshold,
     TimeOnly? ActiveFrom,
     TimeOnly? ActiveTo);
